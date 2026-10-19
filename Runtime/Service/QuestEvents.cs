@@ -5,16 +5,26 @@ namespace QuestSystem
     /** <summary>A quest was given.</summary> */
     public readonly struct QuestGivenEvent : IEvent
     {
+        /** <summary>The service that raised it.</summary> */
+        public QuestService Source { get; }
+
         /** <summary>The quest.</summary> */
         public QuestDefinition Quest { get; }
 
         /** <summary>Makes the event.</summary> */
-        public QuestGivenEvent(QuestDefinition quest) => Quest = quest;
+        public QuestGivenEvent(QuestService source, QuestDefinition quest)
+        {
+            Source = source;
+            Quest = quest;
+        }
     }
 
     /** <summary>A step started, or completed, or failed.</summary> */
     public readonly struct StepChangedEvent : IEvent
     {
+        /** <summary>The service that raised it.</summary> */
+        public QuestService Source { get; }
+
         /** <summary>The quest.</summary> */
         public QuestDefinition Quest { get; }
 
@@ -25,8 +35,9 @@ namespace QuestSystem
         public StepState State { get; }
 
         /** <summary>Makes the event.</summary> */
-        public StepChangedEvent(QuestDefinition quest, QuestStep step, StepState state)
+        public StepChangedEvent(QuestService source, QuestDefinition quest, QuestStep step, StepState state)
         {
+            Source = source;
             Quest = quest;
             Step = step;
             State = state;
@@ -36,6 +47,9 @@ namespace QuestSystem
     /** <summary>An objective's progress changed.</summary> */
     public readonly struct ObjectiveProgressedEvent : IEvent
     {
+        /** <summary>The service that raised it.</summary> */
+        public QuestService Source { get; }
+
         /** <summary>The quest.</summary> */
         public QuestDefinition Quest { get; }
 
@@ -46,8 +60,9 @@ namespace QuestSystem
         public int Progress { get; }
 
         /** <summary>Makes the event.</summary> */
-        public ObjectiveProgressedEvent(QuestDefinition quest, QuestObjective objective, int progress)
+        public ObjectiveProgressedEvent(QuestService source, QuestDefinition quest, QuestObjective objective, int progress)
         {
+            Source = source;
             Quest = quest;
             Objective = objective;
             Progress = progress;
@@ -57,6 +72,9 @@ namespace QuestSystem
     /** <summary>A quest was completed or failed.</summary> */
     public readonly struct QuestEndedEvent : IEvent
     {
+        /** <summary>The service that raised it.</summary> */
+        public QuestService Source { get; }
+
         /** <summary>The quest.</summary> */
         public QuestDefinition Quest { get; }
 
@@ -67,8 +85,9 @@ namespace QuestSystem
         public int Completions { get; }
 
         /** <summary>Makes the event.</summary> */
-        public QuestEndedEvent(QuestDefinition quest, QuestState state, int completions)
+        public QuestEndedEvent(QuestService source, QuestDefinition quest, QuestState state, int completions)
         {
+            Source = source;
             Quest = quest;
             State = state;
             Completions = completions;
@@ -78,6 +97,9 @@ namespace QuestSystem
     /** <summary>A story flag's value changed.</summary> */
     public readonly struct FlagChangedEvent : IEvent
     {
+        /** <summary>The service that raised it.</summary> */
+        public QuestService Source { get; }
+
         /** <summary>The flag.</summary> */
         public StoryFlag Flag { get; }
 
@@ -85,8 +107,9 @@ namespace QuestSystem
         public int Value { get; }
 
         /** <summary>Makes the event.</summary> */
-        public FlagChangedEvent(StoryFlag flag, int value)
+        public FlagChangedEvent(QuestService source, StoryFlag flag, int value)
         {
+            Source = source;
             Flag = flag;
             Value = value;
         }
@@ -95,10 +118,17 @@ namespace QuestSystem
     /** <summary>The quest the player follows changed; null when none.</summary> */
     public readonly struct ActiveQuestChangedEvent : IEvent
     {
+        /** <summary>The service that raised it.</summary> */
+        public QuestService Source { get; }
+
         /** <summary>The quest; null when none.</summary> */
         public QuestDefinition Quest { get; }
 
         /** <summary>Makes the event.</summary> */
-        public ActiveQuestChangedEvent(QuestDefinition quest) => Quest = quest;
+        public ActiveQuestChangedEvent(QuestService source, QuestDefinition quest)
+        {
+            Source = source;
+            Quest = quest;
+        }
     }
 }

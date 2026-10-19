@@ -1,4 +1,6 @@
 using System.Linq;
+using Extensions.EditorTools;
+using Extensions.Ids;
 using NUnit.Framework;
 using QuestSystem.EditorTools;
 using static QuestSystem.Tests.Build;
@@ -51,6 +53,14 @@ namespace QuestSystem.Tests
 
             quest.Configure(new[] { Step("a", Count("x", _kit.Signal("A"))), Step("b", new StepSettings { UnlockWhen = new StepStateCondition(quest, "b") }, Count("y", _kit.Signal("B"))) });
             Assert.That(Problems(quest, QuestIssueLevel.Error), Has.Some.Contains("never starts"));
+        }
+
+        [Test]
+        public void AQuestWithNoAssetId_IsAnError()
+        {
+            var quest = _kit.Quest("NoId", new[] { Step("s", Count("x", _kit.Signal("A"))) }, new QuestSettings { Title = "NoId" });
+            IdentifiedAssetDatabase.WriteId(quest, default(AssetId));
+            Assert.That(Problems(quest, QuestIssueLevel.Error), Has.Some.Contains("no asset id"));
         }
 
         [Test]

@@ -1,4 +1,4 @@
-using System;
+using System.Collections.Generic;
 using Extensions.Inspector;
 using UnityEngine;
 
@@ -11,7 +11,14 @@ namespace QuestSystem
         bool Accepts(Collider other);
     }
 
-    /** <summary>A trigger volume that raises quest signals when something enters or leaves it: reaching a place, leaving an area.</summary> */
+    /**
+     * <summary>A trigger volume that raises quest signals when something enters or leaves it: reaching a place, leaving an area.</summary>
+     * <remarks>
+     * It counts bodies, not colliders: a body is its rigidbody, or the collider's own object without one. A body with
+     * several colliders enters once, when the first is inside, and leaves once, when the last is out. A collider
+     * disabled or destroyed inside is never reported as leaving, as with any Unity trigger.
+     * </remarks>
+     */
     [DisallowMultipleComponent]
     public sealed class QuestTrigger : MonoBehaviour
     {
@@ -34,18 +41,46 @@ namespace QuestSystem
 
         #endregion
 
+        #region Private Fields
+
+        /** <summary>Keyed by body, resolving to how many of its counted colliders are inside.</summary> */
+        private readonly Dictionary<GameObject, int> _inside = new Dictionary<GameObject, int>();
+
+        #endregion
+
         #region MonoBehaviour Callbacks
 
-        private void OnTriggerEnter(Collider other) => RaiseFor(other, onEnter);
+        private void OnDisable() => _inside.Clear();
 
-        private void OnTriggerExit(Collider other) => RaiseFor(other, onExit);
+        private void OnTriggerEnter(Collider other)
+        {
+            if (!Counts(other)) return;
+            var body = BodyOf(other);
+            _inside.TryGetValue(body, out var count);
+            _inside[body] = count + 1;
+            if (count == 0) Raise(onEnter);
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (!Counts(other)) return;
+            var body = BodyOf(other);
+            if (!_inside.TryGetValue(body, out var count)) return;
+            if (count > 1)
+            {
+                _inside[body] = count - 1;
+                return;
+            }
+            _inside.Remove(body);
+            Raise(onExit);
+        }
 
         #endregion
 
         #region Public API
 
-        /** <summary>Sets the trigger up in code, as tests and tools do.</summary> */
-        public void Configure(QuestRuntime questRuntime, QuestSignal enter, QuestSignal exit = null, IQuestTriggerFilter triggerFilter = null)
+        /** <summary>Sets the trigger up in code, as tests do.</summary> */
+        internal void Configure(QuestRuntime questRuntime, QuestSignal enter, QuestSignal exit = null, IQuestTriggerFilter triggerFilter = null)
         {
             runtime = questRuntime;
             onEnter = enter;
@@ -61,9 +96,11 @@ namespace QuestSystem
 
         #region Helpers
 
-        private void RaiseFor(Collider other, QuestSignal signal)
+        private static GameObject BodyOf(Collider other) => other.attachedRigidbody != null ? other.attachedRigidbody.gameObject : other.gameObject;
+
+        private void Raise(QuestSignal signal)
         {
-            if (signal == null || !Counts(other)) return;
+            if (signal == null) return;
             if (runtime == null || runtime.Service == null)
             {
                 Debug.LogWarning($"Quests: {name} has no running quest service.", this);

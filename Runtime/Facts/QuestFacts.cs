@@ -37,6 +37,9 @@ namespace QuestSystem
 
         /** <summary>How many times a quest has been completed.</summary> */
         int CompletionsOf(QuestDefinition quest);
+
+        /** <summary>An objective's progress, by its id in the quest; 0 when unknown.</summary> */
+        int ProgressOf(QuestDefinition quest, string objectiveId);
     }
 
     /** <summary>Story flags, as conditions read them.</summary> */

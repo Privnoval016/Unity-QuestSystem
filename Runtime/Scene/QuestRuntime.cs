@@ -24,6 +24,8 @@ namespace QuestSystem
 
         private void OnEnable() => Service = null;
 
+        private void OnDisable() => Service = null;
+
         #endregion
 
         #region Public API

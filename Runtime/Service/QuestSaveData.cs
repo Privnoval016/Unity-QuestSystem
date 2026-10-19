@@ -30,8 +30,17 @@ namespace QuestSystem
         /** <summary>How many times it has been completed.</summary> */
         public int Completions;
 
+        /** <summary>When it was last given, as a count of quest events that game; 0 when never.</summary> */
+        public long GivenOrder;
+
+        /** <summary>When it last ended, as a count of quest events that game; 0 when never.</summary> */
+        public long EndedOrder;
+
         /** <summary>Its steps' states, by step id.</summary> */
         public List<StepEntry> Steps = new List<StepEntry>();
+
+        /** <summary>Its objectives' progress, by objective id (unique in the quest), whichever step they are in.</summary> */
+        public List<ObjectiveEntry> Objectives = new List<ObjectiveEntry>();
     }
 
     /** <summary>One step's saved state.</summary> */
@@ -43,9 +52,6 @@ namespace QuestSystem
 
         /** <summary>Its state.</summary> */
         public StepState State;
-
-        /** <summary>Its objectives' progress, by objective id.</summary> */
-        public List<ObjectiveEntry> Objectives = new List<ObjectiveEntry>();
     }
 
     /** <summary>One objective's saved progress.</summary> */

@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
+using Extensions.Logic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -143,21 +146,112 @@ namespace QuestSystem.Tests
         public void ABranch_UnlocksByCondition_AndAStepMarkedToEndsTheQuest()
         {
             var sided = _kit.Flag("SidedWithGuild");
-            var a = _kit.Signal("A");
+            var talk = _kit.Signal("Talk");
+            var guildWork = _kit.Signal("GuildWork");
             var quest = _kit.Quest("Fork", new[]
             {
-                Step("start", Count("talk", a)),
-                Step("guild", new StepSettings { UnlockWhen = new FlagCondition(sided), EndsQuest = true }, Count("g", a)),
-                Step("rebels", new StepSettings { UnlockWhen = new FlagCondition(sided, 0, Comparison.Equal), EndsQuest = true }, Count("r", _kit.Signal("R"))),
+                Step("start", Count("talk", talk)),
+                Step("guild", new StepSettings { UnlockWhen = new FlagCondition(sided), EndsQuest = true }, Count("g", guildWork)),
+                Step("rebels", new StepSettings { UnlockWhen = new FlagCondition(sided, 0, NumberComparison.Equal), EndsQuest = true }, Count("r", _kit.Signal("R"))),
             });
             var service = _kit.Start();
             service.Give(quest);
             Assert.That(service.StateOf(quest, "rebels"), Is.EqualTo(StepState.Active));
+            Assert.That(service.StateOf(quest, "guild"), Is.EqualTo(StepState.Locked));
+            service.Raise(talk);
+            Assert.That(service.StateOf(quest), Is.EqualTo(QuestState.Active), "start isn't marked to end the quest");
             service.SetFlag(sided, 1);
             Assert.That(service.StateOf(quest, "guild"), Is.EqualTo(StepState.Active));
-            service.Raise(a);
-            service.Raise(a);
+            service.Raise(guildWork);
             Assert.That(service.StateOf(quest), Is.EqualTo(QuestState.Done));
+            Assert.That(service.CompletionsOf(quest), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void TwoEndingBranches_DoneByOneSignal_CompleteTheQuestOnce()
+        {
+            var sided = _kit.Flag("Sided");
+            var shared = _kit.Signal("Shared");
+            var log = new List<string>();
+            var quest = _kit.Quest("Fork", new[]
+            {
+                Step("guild", new StepSettings { UnlockWhen = new FlagCondition(sided), EndsQuest = true }, Count("g", shared)),
+                Step("rebels", new StepSettings { UnlockWhen = new FlagCondition(sided, 0, NumberComparison.Equal), EndsQuest = true }, Count("r", shared)),
+            }, new QuestSettings { Rewards = new IQuestReward[] { new RecordingReward { Name = "gold", Log = log } } });
+            var service = _kit.Start();
+            service.Give(quest);
+            service.SetFlag(sided, 1);
+            Assert.That(service.StateOf(quest, "guild"), Is.EqualTo(StepState.Active));
+            Assert.That(service.StateOf(quest, "rebels"), Is.EqualTo(StepState.Active));
+
+            service.Raise(shared);
+            Assert.That(service.CompletionsOf(quest), Is.EqualTo(1));
+            Assert.That(log, Is.EqualTo(new[] { "gold" }));
+            Assert.That(_kit.Events.Count(e => e.StartsWith("Done Fork")), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void AllRequired_WaitsForEveryObjective()
+        {
+            var a = _kit.Signal("A");
+            var b = _kit.Signal("B");
+            var quest = _kit.Quest("Both", new[] { Step("s", Count("x", a), Count("y", b, 2)) });
+            var service = _kit.Start();
+            service.Give(quest);
+            service.Raise(a);
+            service.Raise(b);
+            Assert.That(service.StateOf(quest), Is.EqualTo(QuestState.Active));
+            service.Raise(b);
+            Assert.That(service.StateOf(quest), Is.EqualTo(QuestState.Done));
+        }
+
+        [Test]
+        public void ASignalThatEndsOneQuest_AndWouldFailAnother_EndsEachOnce()
+        {
+            var a = _kit.Signal("A");
+            var first = _kit.Quest("First", new[] { Step("s", Count("x", a)) });
+            var second = _kit.Quest("Second", new[] { Step("s", Count("y", a)) }, new QuestSettings { FailWhen = new QuestStateCondition(first) });
+            var service = _kit.Start();
+            service.Give(first);
+            service.Give(second);
+            service.Raise(a);
+
+            Assert.That(service.StateOf(first), Is.EqualTo(QuestState.Done));
+            Assert.That(service.StateOf(second), Is.EqualTo(QuestState.Done), "the signal's own progress lands before what it causes");
+            Assert.That(_kit.Events.Where(e => e.Contains(" Second x")), Is.EqualTo(new[] { "Done Second x1" }));
+        }
+
+        [Test]
+        public void SignalPayloads_FilterWhatCounts()
+        {
+            var defeated = _kit.Signal("Defeated");
+            var quest = _kit.Quest("Wolves", new[] { Step("s", CountWhen("wolves", defeated, new FoeIs { Kind = "Wolf" }, 3)) });
+            var service = _kit.Start();
+            service.Give(quest);
+
+            service.Raise(defeated, 1, Facts.Of<IDefeatedFoe>(new DefeatedFoe("Bear")));
+            service.Raise(defeated);
+            Assert.That(service.ProgressOf(quest, "wolves"), Is.Zero);
+            service.Raise(defeated, 2, Facts.Of<IDefeatedFoe>(new DefeatedFoe("Wolf")));
+            Assert.That(service.ProgressOf(quest, "wolves"), Is.EqualTo(2));
+        }
+
+        [Test]
+        public void SignalConditions_ReadTheWorldsFactsUnderThePayload()
+        {
+            var night = _kit.Flag("Night");
+            var defeated = _kit.Signal("Defeated");
+            var onlyWhen = new AndCondition<IFacts> { children = { new FoeIs { Kind = "Wolf" }, new FlagCondition(night) } };
+            var quest = _kit.Quest("NightHunt", new[] { Step("s", CountWhen("wolves", defeated, onlyWhen, 2)) });
+            var service = _kit.Start();
+            service.Give(quest);
+            var wolf = Facts.Of<IDefeatedFoe>(new DefeatedFoe("Wolf"));
+
+            service.Raise(defeated, 1, wolf);
+            Assert.That(service.ProgressOf(quest, "wolves"), Is.Zero);
+            service.SetFlag(night, 1);
+            service.Raise(defeated, 1, wolf);
+            Assert.That(service.ProgressOf(quest, "wolves"), Is.EqualTo(1));
         }
 
         [Test]
@@ -228,6 +322,38 @@ namespace QuestSystem.Tests
             service.Raise(a);
             Assert.That(service.Give(quest), Is.False);
             Assert.That(service.CompletionsOf(quest), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void AFailedRepeatableQuest_CanBeGivenAgain()
+        {
+            var late = _kit.Flag("Late");
+            var a = _kit.Signal("A");
+            var quest = _kit.Quest("Retry", new[] { Step("s", Count("x", a)) }, new QuestSettings { Repeatable = true, FailWhen = new FlagCondition(late) });
+            var service = _kit.Start();
+            service.Give(quest);
+            service.SetFlag(late, 1);
+            Assert.That(service.StateOf(quest), Is.EqualTo(QuestState.Failed));
+            service.SetFlag(late, 0);
+            Assert.That(service.Give(quest));
+            service.Raise(a);
+            Assert.That(service.CompletionsOf(quest), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void GivenAndEndedOrder_RiseWithEachQuestEvent()
+        {
+            var a = _kit.Signal("A");
+            var first = _kit.Quest("First", new[] { Step("s", Count("x", a)) });
+            var second = _kit.Quest("Second", new[] { Step("s", Count("y", _kit.Signal("B"))) });
+            var service = _kit.Start();
+            Assert.That(service.GivenOrderOf(first), Is.Zero);
+            service.Give(first);
+            service.Give(second);
+            service.Raise(a);
+            Assert.That(service.GivenOrderOf(first), Is.LessThan(service.GivenOrderOf(second)));
+            Assert.That(service.EndedOrderOf(first), Is.GreaterThan(service.GivenOrderOf(second)));
+            Assert.That(service.EndedOrderOf(second), Is.Zero);
         }
 
         [Test]
@@ -353,6 +479,71 @@ namespace QuestSystem.Tests
             Assert.That(_kit.Facts.TryGet<IFlagFacts>(out var flags) && flags == service);
             service.Dispose();
             Assert.That(_kit.Facts.TryGet<IQuestFacts>(out _), Is.False);
+        }
+
+        [Test]
+        public void ADisposedService_IgnoresChanges()
+        {
+            var flag = _kit.Flag("F");
+            var a = _kit.Signal("A");
+            var quest = _kit.Quest("Q", new[] { Step("s", Count("x", a)) });
+            var service = _kit.Start();
+            service.Dispose();
+            _kit.Events.Clear();
+
+            Assert.That(service.Give(quest), Is.False);
+            service.SetFlag(flag, 1);
+            service.Raise(a);
+            service.NewGame();
+            Assert.That(_kit.Events, Is.Empty);
+            Assert.That(service.ValueOf(flag), Is.Zero);
+            Assert.DoesNotThrow(service.Dispose);
+        }
+
+        [Test]
+        public void AServiceThatCantRegister_LeavesNothingRegistered()
+        {
+            var other = new OtherFlags();
+            _kit.Facts.Register<IFlagFacts>(other);
+            Assert.Throws<InvalidOperationException>(() => new QuestService(_kit.Facts, _kit.Quests, _kit.Assets));
+            Assert.That(_kit.Facts.TryGet<IQuestFacts>(out _), Is.False);
+            Assert.That(_kit.Facts.TryGet<IFlagFacts>(out var flags) && flags == other);
+            _kit.Facts.Unregister<IFlagFacts>(other);
+        }
+
+        private sealed class OtherFlags : IFlagFacts
+        {
+            public int ValueOf(StoryFlag flag) => 0;
+        }
+
+        [Test]
+        public void AConditionThatThrows_IsLogged_AndOtherQuestsStillRun()
+        {
+            var flag = _kit.Flag("F");
+            var broken = _kit.Quest("Broken", new[] { Step("a", Count("x", _kit.Signal("A"))), Step("b", new StepSettings { UnlockWhen = new ThrowingCondition { Flag = flag } }) });
+            var fine = _kit.Quest("Fine", new[] { Step("s", new QuestObjective("f", new FlagTracker(flag))) });
+            var service = _kit.Start();
+            LogAssert.Expect(LogType.Error, new Regex("Broken"));
+            service.Give(broken);
+            service.Give(fine);
+            LogAssert.Expect(LogType.Error, new Regex("Broken"));
+            service.SetFlag(flag, 1);
+            Assert.That(service.StateOf(fine), Is.EqualTo(QuestState.Done));
+        }
+
+        [Test]
+        public void ChangesThatNeverStop_AreCutOff()
+        {
+            var flag = _kit.Flag("Runaway");
+            var runaway = new RunawayCondition { Flag = flag };
+            var quest = _kit.Quest("Loop", new[] { Step("a", Count("x", _kit.Signal("A"))), Step("b", new StepSettings { UnlockWhen = runaway }) });
+            var service = _kit.Start();
+            service.Give(quest);
+            runaway.Service = service;
+            LogAssert.Expect(LogType.Error, new Regex("stopped settling"));
+            service.SetFlag(flag, 1);
+            Assert.That(service.ValueOf(flag), Is.GreaterThan(1000));
+            runaway.Service = null;
         }
 
         [Test]

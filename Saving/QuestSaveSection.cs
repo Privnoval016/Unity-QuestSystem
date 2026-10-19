@@ -13,7 +13,6 @@ namespace QuestSystem
         #region Private Fields
 
         private readonly QuestService _quests;
-        private readonly string _key;
 
         #endregion
 
@@ -23,7 +22,7 @@ namespace QuestSystem
         public const string DefaultKey = "quests";
 
         /** <inheritdoc /> */
-        public override string Key => _key;
+        public override string Key { get; }
 
         #endregion
 
@@ -33,7 +32,7 @@ namespace QuestSystem
         public QuestSaveSection(QuestService quests, string key = DefaultKey)
         {
             _quests = quests ?? throw new ArgumentNullException(nameof(quests));
-            _key = key;
+            Key = key;
         }
 
         #endregion

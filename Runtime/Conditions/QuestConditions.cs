@@ -5,29 +5,6 @@ using UnityEngine;
 
 namespace QuestSystem
 {
-    /** <summary>How a value compares to a number.</summary> */
-    public enum Comparison
-    {
-        /** <summary>At least the number.</summary> */
-        AtLeast,
-        /** <summary>Exactly the number.</summary> */
-        Equal,
-        /** <summary>Below the number.</summary> */
-        Below,
-    }
-
-    /** <summary>Compares values by a <see cref="Comparison" />.</summary> */
-    public static class Comparisons
-    {
-        /** <summary>True when the value compares to the number as asked.</summary> */
-        public static bool Holds(Comparison comparison, int value, int number) => comparison switch
-        {
-            Comparison.Equal => value == number,
-            Comparison.Below => value < number,
-            _ => value >= number,
-        };
-    }
-
     /** <summary>True when a story flag's value compares to a number as asked: by default, when the flag is set.</summary> */
     [Serializable]
     public sealed class FlagCondition : ICondition<IFacts>, ISubjectReader
@@ -38,7 +15,7 @@ namespace QuestSystem
         [SerializeField] private StoryFlag flag;
 
         [Tooltip("How its value compares to the number.")]
-        [SerializeField] private Comparison comparison;
+        [SerializeField] private NumberComparison comparison;
 
         [Tooltip("The number to compare with. At least 1 means 'is set'.")]
         [SerializeField] private int value = 1;
@@ -51,7 +28,7 @@ namespace QuestSystem
         public FlagCondition() { }
 
         /** <summary>A condition on a flag, as code builds one.</summary> */
-        public FlagCondition(StoryFlag flag, int value = 1, Comparison comparison = Comparison.AtLeast)
+        public FlagCondition(StoryFlag flag, int value = 1, NumberComparison comparison = NumberComparison.AtLeast)
         {
             this.flag = flag;
             this.value = value;
@@ -60,7 +37,7 @@ namespace QuestSystem
 
         /** <inheritdoc /> */
         public bool Evaluate(IFacts context) =>
-            flag != null && context != null && context.TryGet<IFlagFacts>(out var flags) && Comparisons.Holds(comparison, flags.ValueOf(flag), value);
+            flag != null && context != null && context.TryGet<IFlagFacts>(out var flags) && NumberComparisons.Holds(comparison, flags.ValueOf(flag), value);
 
         /** <inheritdoc /> */
         public bool TryCollectSubjects(ICollection<IConditionSubject> subjects)
@@ -120,16 +97,6 @@ namespace QuestSystem
         }
 
         #endregion
-    }
-
-    /** <summary>Shows a string field as a menu of a quest's steps; the quest is the named sibling field.</summary> */
-    public sealed class StepIdPickerAttribute : PropertyAttribute
-    {
-        /** <summary>The sibling field holding the quest.</summary> */
-        public string QuestField { get; }
-
-        /** <summary>Picks from the steps of the quest in the named sibling field.</summary> */
-        public StepIdPickerAttribute(string questField) => QuestField = questField;
     }
 
     /** <summary>True when one of a quest's steps is in a state.</summary> */

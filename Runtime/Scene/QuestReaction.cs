@@ -13,7 +13,14 @@ namespace QuestSystem
         void Apply(bool on);
     }
 
-    /** <summary>Makes the scene follow quest state: while its condition holds, its effects are on; otherwise off.</summary> */
+    /**
+     * <summary>Makes the scene follow quest state: while its condition holds, its effects are on; otherwise off.</summary>
+     * <remarks>
+     * It listens from Awake to OnDestroy, not while enabled, so its effects may turn off its own object and still turn
+     * it back on. Awake never runs on an object that starts inactive, so put the reaction on an object that starts
+     * active and point its effects at what should change.
+     * </remarks>
+     */
     [DisallowMultipleComponent]
     public sealed class QuestReaction : MonoBehaviour
     {
@@ -32,57 +39,39 @@ namespace QuestSystem
 
         #region Private Fields
 
-        private readonly HashSet<IConditionSubject> _reads = new HashSet<IConditionSubject>();
         private QuestService _service;
-        private bool? _applied;
-        private bool _readsKnown;
+        private ConditionWatcher _watcher;
 
         #endregion
 
         #region Properties
 
         /** <summary>True while the effects are on.</summary> */
-        public bool IsOn => _applied == true;
+        public bool IsOn => _watcher?.Holds == true;
 
         #endregion
 
         #region MonoBehaviour Callbacks
 
-        private void OnEnable()
-        {
-            _reads.Clear();
-            _readsKnown = ConditionSubjects.TryCollect(when, _reads);
-            if (runtime != null) runtime.OnServiceChanged += HandleServiceChanged;
-            Attach(runtime != null ? runtime.Service : null);
-        }
+        private void Awake() => Hook();
 
-        private void OnDisable()
-        {
-            if (runtime != null) runtime.OnServiceChanged -= HandleServiceChanged;
-            Attach(null);
-        }
+        private void OnDestroy() => Unhook();
 
         #endregion
 
         #region Public API
 
-        /** <summary>Sets the reaction up in code, as tests and tools do. Call before it is enabled.</summary> */
-        public void Configure(QuestRuntime questRuntime, ICondition<IFacts> condition, IEnumerable<IQuestReactionEffect> reactionEffects)
+        /** <summary>Checks the condition now and applies or undoes the effects if it changed.</summary> */
+        public void Refresh() => _watcher?.Refresh();
+
+        /** <summary>Sets the reaction up in code, as tests do, and checks it at once.</summary> */
+        internal void Configure(QuestRuntime questRuntime, ICondition<IFacts> condition, IEnumerable<IQuestReactionEffect> reactionEffects)
         {
+            Unhook();
             runtime = questRuntime;
             when = condition;
             effects = new List<IQuestReactionEffect>(reactionEffects ?? Array.Empty<IQuestReactionEffect>());
-        }
-
-        /** <summary>Checks the condition now and applies or undoes the effects if it changed.</summary> */
-        public void Refresh()
-        {
-            if (_service == null || when == null) return;
-            var on = when.Evaluate(_service.Facts);
-            if (_applied == on) return;
-            _applied = on;
-            foreach (var effect in effects)
-                effect?.Apply(on);
+            Hook();
         }
 
         #endregion
@@ -91,34 +80,40 @@ namespace QuestSystem
 
         private void HandleServiceChanged(QuestService service) => Attach(service);
 
-        private void HandleSubjectChanged(IConditionSubject subject)
-        {
-            if (!_readsKnown || _reads.Contains(subject)) Refresh();
-        }
+        private void HandleReset() => _watcher?.Reapply();
 
-        private void HandleReset()
+        private void HandleHoldsChanged(bool on)
         {
-            _applied = null;
-            Refresh();
+            foreach (var effect in effects)
+                effect?.Apply(on);
         }
 
         #endregion
 
         #region Helpers
 
+        private void Hook()
+        {
+            if (runtime == null) return;
+            runtime.OnServiceChanged += HandleServiceChanged;
+            Attach(runtime.Service);
+        }
+
+        private void Unhook()
+        {
+            if (runtime != null) runtime.OnServiceChanged -= HandleServiceChanged;
+            Attach(null);
+        }
+
         private void Attach(QuestService service)
         {
-            if (_service != null)
-            {
-                _service.Facts.OnSubjectChanged -= HandleSubjectChanged;
-                _service.OnReset -= HandleReset;
-            }
+            if (_service != null) _service.OnReset -= HandleReset;
+            _watcher?.Dispose();
+            _watcher = null;
             _service = service;
-            _applied = null;
-            if (_service == null) return;
-            _service.Facts.OnSubjectChanged += HandleSubjectChanged;
+            if (_service == null || when == null) return;
             _service.OnReset += HandleReset;
-            Refresh();
+            _watcher = new ConditionWatcher(when, _service.Facts, HandleHoldsChanged);
         }
 
         #endregion

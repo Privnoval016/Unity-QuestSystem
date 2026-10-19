@@ -33,6 +33,9 @@ namespace QuestSystem
         [Tooltip("Where the quest is given: any asset with a display name. Optional.")]
         [SerializeField] private Object place;
 
+        [Tooltip("Where the quest sits among others of its kind: lower comes first.")]
+        [SerializeField] private int order;
+
         [Tooltip("The level the quest is meant for, shown to players. 0 shows none.")]
         [Min(0)]
         [SerializeField] private int suggestedLevel;
@@ -74,11 +77,14 @@ namespace QuestSystem
         /** <summary>The kind; null when unset.</summary> */
         public QuestKind Kind => kind;
 
-        /** <summary>Who gives it, by name; null when unset.</summary> */
-        public string GiverName => DisplayNames.Of(giver);
+        /** <summary>Who gives it; null when unset. A game's own asset type, so a portrait or a map pin can come from it.</summary> */
+        public IDisplayNamed Giver => DisplayNames.As(giver);
 
-        /** <summary>Where it is given, by name; null when unset.</summary> */
-        public string PlaceName => DisplayNames.Of(place);
+        /** <summary>Where it is given; null when unset.</summary> */
+        public IDisplayNamed Place => DisplayNames.As(place);
+
+        /** <summary>Where it sits among others of its kind: lower comes first.</summary> */
+        public int Order => order;
 
         /** <summary>The level it is meant for; 0 when none.</summary> */
         public int SuggestedLevel => suggestedLevel;
@@ -120,7 +126,7 @@ namespace QuestSystem
         #region Public API
 
         /** <summary>Sets the quest up in code, as tests and tools do.</summary> */
-        public void Configure(IEnumerable<QuestStep> questSteps, QuestSettings settings = default)
+        internal void Configure(IEnumerable<QuestStep> questSteps, QuestSettings settings = default)
         {
             steps = new List<QuestStep>(questSteps ?? Array.Empty<QuestStep>());
             rewards = new List<IQuestReward>(settings.Rewards ?? Array.Empty<IQuestReward>());

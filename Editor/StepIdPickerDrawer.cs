@@ -39,8 +39,10 @@ namespace QuestSystem.EditorTools
                 labels.Insert(0, new GUIContent(string.IsNullOrEmpty(property.stringValue) ? "(choose a step)" : $"(missing: {property.stringValue})"));
                 current = 0;
             }
+            label = EditorGUI.BeginProperty(position, label, property);
             var chosen = EditorGUI.Popup(position, label, current, labels.ToArray());
             if (chosen != current) property.stringValue = ids[chosen];
+            EditorGUI.EndProperty();
         }
 
         #endregion

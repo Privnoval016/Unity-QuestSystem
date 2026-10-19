@@ -61,7 +61,7 @@ namespace QuestSystem
         }
 
         /** <summary>Gives the objective a new id, for the editor when it is missing or repeated.</summary> */
-        public void AssignId(string newId) => id = newId;
+        internal void AssignId(string newId) => id = newId;
 
         #endregion
     }

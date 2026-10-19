@@ -26,7 +26,7 @@ None is auto-referenced.
 
 | Asset or type | What it is |
 |---|---|
-| **`QuestDefinition`** (*Create > Quests > Quest*) | A quest: title, summary, kind, giver and place, suggested level, steps, rewards, and when it can be given or fails. Repeatable or not; hidden until given or not |
+| **`QuestDefinition`** (*Create > Quests > Quest*) | A quest: title, summary, kind, order within its kind, giver and place, suggested level, steps, rewards, and when it can be given or fails. Repeatable or not; hidden until given or not |
 | **`QuestStep`** (inside the quest) | A stage. It starts when the step before it is done, or when its own condition holds (for branches). It completes when all its required objectives are done, or any one. It can fail, which fails the quest. It can end the quest |
 | **`QuestObjective`** (inside a step) | One thing a step asks for, counted by a tracker up to a target. Optional (bonus) objectives never hold a step back |
 | **`StoryFlag`** (*Create > Quests > Story Flag*) | A whole number about the story, 0 when unset. Set by quests and the game, read by conditions and trackers |
@@ -36,14 +36,22 @@ None is auto-referenced.
 **Ids.** Steps and objectives get ids the editor assigns, unique in their quest; a duplicated step gets fresh ones.
 Quests, kinds and flags get asset ids from Extensions. Saves point at ids, so renaming anything is safe.
 
+**Givers and places** are any assets the game makes that implement `IDisplayNamed` (a character, a town). The
+quest only asks for their display name.
+
 **Trackers** (what counts towards an objective):
 
-- **`SignalTracker`:** each time its signal is raised, add the amount.
+- **`SignalTracker`:** each time its signal is raised, add the amount. An optional **only when** condition filters
+  which raises count, reading the signal's payload first and then the world (below).
 - **`FlagTracker`:** the flag's value is the progress, so a counter flag counts and an on/off flag completes it.
 - **`ConditionTracker`:** done while a condition holds. This covers another quest or step being done, or anything
   the game can check.
-- **A custom objective** is a subclass of `ObjectiveTracker`. Override `ProgressFrom(signal, amount)` to count
-  signals, `ProgressNow(facts)` to read state, and `TryCollectSubjects` to say what it reads.
+- **A custom objective** is a subclass of `ObjectiveTracker` implementing one or both of:
+  - `ISignalCounter` to count signals: `ProgressFrom(signal, amount, context)`, plus `TryCollectSignals` so a signal
+    reaches only its counters;
+  - `IStateProgress` to follow state: `ProgressNow(facts)`, plus `TryCollectSubjects` to say what it reads.
+
+  A tracker that can't say what it reads or counts still works; it is just offered every change or signal.
 
 ## Conditions and facts
 
@@ -51,8 +59,9 @@ Conditions are Extensions' `ICondition<IFacts>`: the same conditions the game us
 
 - **The quest service registers `IQuestFacts`** (quest and step states, completions) and **`IFlagFacts`** (flag
   values) in the game's `FactRegistry`. The game registers its own facts there too.
-- **Quest conditions:** `FlagCondition`, `QuestStateCondition`, `StepStateCondition` (choose the step from a
-  menu), combined with And / Or / Not.
+- **Quest conditions:** `FlagCondition` (at least, equal or below a number), `QuestStateCondition`,
+  `StepStateCondition` (choose the step from a menu), combined with And / Or / Not. `IQuestFacts` also gives
+  objective progress, for conditions a game writes.
 - **Checks are change-driven.** Every condition says what it reads, so a change checks only the quests that read
   it. A custom condition that doesn't say is checked after every change, so it still works.
 
@@ -70,7 +79,32 @@ quests.SetFlag(metTheSmith, 1);
 quests.SetActive(smithQuest);         // the quest the player follows
 ```
 
-- **Events** go out on Extensions' event bus for the HUD and menus:
+### Signal payloads
+
+A signal can carry what it says about the moment, so one signal serves many objectives: "foe defeated" with the
+foe, rather than a signal per kind of foe.
+
+```csharp
+// In the game: what the signal says, and a condition that reads it.
+public interface IDefeatedFoe { FoeDefinition Foe { get; } int Level { get; } }
+
+[Serializable]
+public sealed class FoeIs : ICondition<IFacts>
+{
+    [SerializeField] private FoeDefinition foe;
+    public bool Evaluate(IFacts facts) => facts.TryGet<IDefeatedFoe>(out var defeated) && defeated.Foe == foe;
+}
+
+// Where the foe falls:
+quests.Raise(foeDefeated, 1, Facts.Of<IDefeatedFoe>(defeat));
+```
+
+A `SignalTracker` whose **only when** is `FoeIs (wolf)` then counts wolves only. The payload is read before the
+world's facts, so **only when** can also mix in a flag or the time of day with And / Or. A raise with no payload
+fails any condition that needs one. The payload lives only for that raise.
+
+- **Events** go out on Extensions' event bus for the HUD and menus. Each carries the service that raised it
+  (`Source`), so a tool running a second service can tell them apart:
   - `QuestGivenEvent`;
   - `StepChangedEvent` (started, done, failed);
   - `ObjectiveProgressedEvent`;
@@ -78,33 +112,50 @@ quests.SetActive(smithQuest);         // the quest the player follows
   - `FlagChangedEvent`;
   - `ActiveQuestChangedEvent`.
 - **Rewards** implement `IQuestReward` in the game (items, money, a bond rank) and are granted once per completion,
-  never again on a load.
-- **The service owns no statics.** Create it when a game starts and `Dispose` it when the game ends.
+  never again on a load. `Describe()` returns a `RewardDescription` (text, an optional icon and amount) for menus.
+  A reward that throws is logged and the rest are still granted.
+- **Order.** `GivenOrderOf` and `EndedOrderOf` tell when a quest was last given or ended, as a count of quest
+  events this game, so a journal can list recent quests first. They are saved.
+- **The service owns no statics.** Create it when a game starts and `Dispose` it when the game ends; a disposed
+  service ignores further changes.
+- **It stays up when content is wrong.** A condition that throws is logged and that quest skipped; the others run.
+  Conditions that keep changing each other are stopped after 10,000 changes, with an error.
+- **One signal, one moment.** A signal counts towards the steps active when it is raised. A step that the same
+  signal completes or unlocks doesn't count it again, and a quest it ends doesn't end twice.
 
 ## In scenes
 
 - **`QuestRuntime`** (*Create > Quests > Quest Runtime*) is the asset scene objects reach the running service
   through. The game binds its service to it.
 - **`QuestTrigger`** raises a signal when something enters or leaves its collider. It filters by layer, and by an
-  `IQuestTriggerFilter` the game writes (the player only, say).
+  `IQuestTriggerFilter` the game writes (the player only, say). It counts bodies (a rigidbody, or the collider's
+  object without one), so a character with several colliders enters and leaves once.
 - **`QuestReaction`** keeps scene objects in step with quests: while its condition holds, its effects are on
   (`SetActiveEffect`, `EnableBehaviourEffect`, or the game's own `IQuestReactionEffect`). It re-applies itself when
   its scene loads, when a save loads, and when what it reads changes. So a gate a quest opened is open again after
   loading.
+  - It listens from `Awake` to `OnDestroy`, so its effects may turn off its own object and later turn it back on.
+  - Unity never wakes an object that starts inactive, so put the reaction on an object that starts active and point
+    its effects at what should change.
 
 ## Saving
 
-`QuestSaveSection` saves every quest's state, steps and objective progress, every set flag, and the active quest,
-all by id.
+`QuestSaveSection` saves every quest's state, completions and order, its steps' states, its objectives' progress,
+every set flag, and the active quest, all by id.
 
 - **Quests and flags missing from the game** (removed content) are kept and saved again.
 - **A step added after a save** starts by its rule when the save loads.
+- **A quest whose ending step was already done** completes when the save loads.
+- **Damaged values** are kept in range: an unknown state reads as the start, progress stays within its target.
+- **Restoring replaces everything,** even on a service already in use.
 - **A new game** restores an empty section, which clears everything.
 
 ## Validation
 
 *Tools > Quests > Validate Quests* logs problems. Errors also fail a build:
 
+- a quest with no asset id (it couldn't be saved);
+- an empty step or objective slot;
 - an objective with no tracker, or a tracker with nothing set;
 - a step that waits on itself;
 - a quest with no steps.
@@ -136,7 +187,9 @@ Measured with 500 active quests of 5 steps each and 2,000 flags (`QuestScaleTest
 
 | Operation | Time |
 |---|---|
-| Raising a signal | about 0.7 ms |
+| Raising a signal | about 0.06 ms |
 | Changing a flag | about 0.01 ms |
-| Capture | about 2 ms |
-| Restore | about 12 ms |
+| Capture | about 3 ms |
+| Restore | about 10 ms |
+
+A signal reaches only the objectives that count it, and a change only the quests that read it.

@@ -73,6 +73,30 @@ namespace QuestSystem.Tests
         }
 
         [Test]
+        public void ATrigger_CountsABodyWithSeveralCollidersOnce()
+        {
+            var reached = _kit.Signal("Reached");
+            var left = _kit.Signal("Left");
+            var quest = _kit.Quest("Q", new[] { Step("s", Count("in", reached, 5), Count("out", left, 5)) });
+            var service = _kit.Start();
+            _runtime.Bind(service);
+            service.Give(quest);
+            var trigger = Make<QuestTrigger>("Gate");
+            trigger.Configure(_runtime, reached, left);
+            var body = Make<BoxCollider>("Player");
+            var feet = body.gameObject.AddComponent<SphereCollider>();
+
+            Call(trigger, "OnTriggerEnter", body);
+            Call(trigger, "OnTriggerEnter", feet);
+            Call(trigger, "OnTriggerExit", body);
+            Assert.That(service.ProgressOf(quest, "in"), Is.EqualTo(1));
+            Assert.That(service.ProgressOf(quest, "out"), Is.Zero);
+            Call(trigger, "OnTriggerExit", feet);
+            Call(trigger, "OnTriggerExit", feet);
+            Assert.That(service.ProgressOf(quest, "out"), Is.EqualTo(1));
+        }
+
+        [Test]
         public void ATriggerWithNoService_WarnsAndDoesNothing()
         {
             var trigger = Make<QuestTrigger>("Gate");
@@ -92,7 +116,6 @@ namespace QuestSystem.Tests
             reaction.Configure(_runtime, new QuestStateCondition(quest, QuestState.Active), new IQuestReactionEffect[] { new SetActiveEffect(gate, activeWhenOn: false) });
             var service = _kit.Start();
             _runtime.Bind(service);
-            Call(reaction, "OnEnable");
             Assert.That(gate.activeSelf);
 
             service.Give(quest);
@@ -110,7 +133,6 @@ namespace QuestSystem.Tests
             var light = Make<Light>("Lamp");
             var reaction = Make<QuestReaction>("Reaction");
             reaction.Configure(_runtime, new FlagCondition(flag), new IQuestReactionEffect[] { new EnableBehaviourEffect(light) });
-            Call(reaction, "OnEnable");
             Assert.That(reaction.IsOn, Is.False);
 
             var service = _kit.Start();
@@ -123,9 +145,37 @@ namespace QuestSystem.Tests
             service.Restore(saved);
             Assert.That(reaction.IsOn);
             Assert.That(light.enabled);
-            Call(reaction, "OnDisable");
+            Call(reaction, "OnDestroy");
             service.SetFlag(flag, 0);
-            Assert.That(light.enabled, "a disabled reaction stops listening");
+            Assert.That(light.enabled, "a destroyed reaction stops listening");
+        }
+
+        [Test]
+        public void AReaction_ThatHidesItsOwnObject_StillBringsItBack()
+        {
+            var flag = _kit.Flag("Hidden");
+            var reaction = Make<QuestReaction>("Reaction");
+            var service = _kit.Start();
+            _runtime.Bind(service);
+            reaction.Configure(_runtime, new FlagCondition(flag), new IQuestReactionEffect[] { new SetActiveEffect(reaction.gameObject, activeWhenOn: false) });
+
+            service.SetFlag(flag, 1);
+            Assert.That(reaction.gameObject.activeSelf, Is.False);
+            service.SetFlag(flag, 0);
+            Assert.That(reaction.gameObject.activeSelf);
+        }
+
+        [Test]
+        public void AReaction_WithNoCondition_DoesNothing()
+        {
+            var gate = new GameObject("Gate");
+            _made.Add(gate);
+            var reaction = Make<QuestReaction>("Reaction");
+            _runtime.Bind(_kit.Start());
+            reaction.Configure(_runtime, null, new IQuestReactionEffect[] { new SetActiveEffect(gate, activeWhenOn: false) });
+            Assert.That(reaction.IsOn, Is.False);
+            Assert.That(gate.activeSelf);
+            Assert.DoesNotThrow(reaction.Refresh);
         }
 
         [Test]
@@ -139,6 +189,9 @@ namespace QuestSystem.Tests
             Assert.That(_runtime.Service, Is.Null);
             _runtime.Bind(service);
             typeof(QuestRuntime).GetMethod("OnEnable", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(_runtime, null);
+            Assert.That(_runtime.Service, Is.Null);
+            _runtime.Bind(service);
+            typeof(QuestRuntime).GetMethod("OnDisable", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(_runtime, null);
             Assert.That(_runtime.Service, Is.Null);
         }
     }

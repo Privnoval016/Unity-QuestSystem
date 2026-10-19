@@ -62,10 +62,16 @@ namespace QuestSystem.Tests
 
         public void Dispose()
         {
-            Service?.Dispose();
-            foreach (var undo in _undo) undo();
-            foreach (var made in _made)
-                if (made != null) Object.DestroyImmediate(made);
+            try
+            {
+                Service?.Dispose();
+            }
+            finally
+            {
+                foreach (var undo in _undo) undo();
+                foreach (var made in _made)
+                    if (made != null) Object.DestroyImmediate(made);
+            }
         }
 
         private T Make<T>(string name) where T : ScriptableObject
@@ -109,7 +115,7 @@ namespace QuestSystem.Tests
         public List<string> Log;
         public bool Throws;
 
-        public string Describe() => Name;
+        public RewardDescription Describe() => new RewardDescription(Name);
 
         public void Grant(IFacts facts)
         {
@@ -139,11 +145,72 @@ namespace QuestSystem.Tests
         }
     }
 
+    /** <summary>What a "foe defeated" signal says about the foe, as a game's payload would.</summary> */
+    public interface IDefeatedFoe
+    {
+        string Kind { get; }
+    }
+
+    /** <summary>A defeated foe, sent with a signal.</summary> */
+    public sealed class DefeatedFoe : IDefeatedFoe
+    {
+        public DefeatedFoe(string kind) => Kind = kind;
+
+        public string Kind { get; }
+    }
+
+    /** <summary>Holds when the signal's payload names a foe of this kind.</summary> */
+    [Serializable]
+    public sealed class FoeIs : ICondition<IFacts>
+    {
+        public string Kind;
+
+        public bool Evaluate(IFacts context) => context.TryGet<IDefeatedFoe>(out var foe) && foe.Kind == Kind;
+    }
+
+    /** <summary>A condition that throws, reading one flag.</summary> */
+    [Serializable]
+    public sealed class ThrowingCondition : ICondition<IFacts>, ISubjectReader
+    {
+        public StoryFlag Flag;
+
+        public bool Evaluate(IFacts context) => throw new InvalidOperationException("condition broke");
+
+        public bool TryCollectSubjects(ICollection<IConditionSubject> subjects)
+        {
+            subjects.Add(Flag);
+            return true;
+        }
+    }
+
+    /** <summary>A condition that raises its own flag every time it is checked, so changes never stop.</summary> */
+    [Serializable]
+    public sealed class RunawayCondition : ICondition<IFacts>, ISubjectReader
+    {
+        public StoryFlag Flag;
+        public QuestService Service;
+
+        public bool Evaluate(IFacts context)
+        {
+            Service?.AddToFlag(Flag, 1);
+            return false;
+        }
+
+        public bool TryCollectSubjects(ICollection<IConditionSubject> subjects)
+        {
+            subjects.Add(Flag);
+            return true;
+        }
+    }
+
     /** <summary>Shorthands for building steps and objectives.</summary> */
     public static class Build
     {
         public static QuestObjective Count(string id, QuestSignal signal, int target = 1, bool optional = false) =>
             new QuestObjective(id, new SignalTracker(signal), target, optional);
+
+        public static QuestObjective CountWhen(string id, QuestSignal signal, ICondition<IFacts> onlyWhen, int target = 1) =>
+            new QuestObjective(id, new SignalTracker(signal, onlyWhen), target);
 
         public static QuestStep Step(string id, params QuestObjective[] objectives) => new QuestStep(id, objectives);
 

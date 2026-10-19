@@ -161,6 +161,86 @@ namespace QuestSystem.Tests
         }
 
         [Test]
+        public void Restoring_OntoAServiceInUse_ReplacesEverything()
+        {
+            var a = _kit.Signal("A");
+            var flag = _kit.Flag("F");
+            var quest = _kit.Quest("Q", new[] { Step("s", Count("x", a, 3)) });
+            var later = _kit.Quest("Later", new[] { Step("s", Count("y", a, 9)) });
+            var service = _kit.Start();
+            service.Give(quest);
+            service.Raise(a);
+            var saved = service.Capture();
+
+            service.Raise(a);
+            service.SetFlag(flag, 5);
+            service.Give(later);
+            service.SetActive(later);
+            service.Restore(saved);
+
+            Assert.That(service.ProgressOf(quest, "x"), Is.EqualTo(1));
+            Assert.That(service.ValueOf(flag), Is.Zero);
+            Assert.That(service.StateOf(later), Is.EqualTo(QuestState.NotGiven));
+            Assert.That(service.ProgressOf(later, "y"), Is.Zero);
+            Assert.That(service.ActiveQuest, Is.Null);
+        }
+
+        [Test]
+        public void DamagedValues_AreKeptInRange()
+        {
+            var quest = _kit.Quest("Q", new[] { Step("s", Count("x", _kit.Signal("A"), 3)) });
+            _kit.Start(newGame: false);
+            _kit.Service.Restore(new QuestSaveData
+            {
+                Quests =
+                {
+                    new QuestEntry
+                    {
+                        Quest = quest.AssetId.Value, State = (QuestState)99, Completions = -4, GivenOrder = -1,
+                        Steps = { new StepEntry { Step = "s", State = (StepState)42 }, null },
+                        Objectives = { new ObjectiveEntry { Objective = "x", Progress = 999 }, new ObjectiveEntry { Objective = "missing", Progress = 1 }, null },
+                    },
+                },
+            });
+
+            Assert.That(_kit.Service.StateOf(quest), Is.EqualTo(QuestState.NotGiven));
+            Assert.That(_kit.Service.CompletionsOf(quest), Is.Zero);
+            Assert.That(_kit.Service.GivenOrderOf(quest), Is.Zero);
+            Assert.That(_kit.Service.StateOf(quest, "s"), Is.EqualTo(StepState.Locked));
+            Assert.That(_kit.Service.ProgressOf(quest, "x"), Is.EqualTo(3));
+        }
+
+        [Test]
+        public void AnActiveQuestWhoseEndingStepIsDone_CompletesOnLoad()
+        {
+            var quest = _kit.Quest("Q", new[] { Step("a", Count("x", _kit.Signal("A"))), Step("b", Count("y", _kit.Signal("B"))) });
+            _kit.Start(newGame: false);
+            _kit.Service.Restore(new QuestSaveData
+            {
+                Quests = { new QuestEntry { Quest = quest.AssetId.Value, State = QuestState.Active, Steps = { new StepEntry { Step = "a", State = StepState.Done }, new StepEntry { Step = "b", State = StepState.Done } } } },
+            });
+            Assert.That(_kit.Service.StateOf(quest), Is.EqualTo(QuestState.Done));
+            Assert.That(_kit.Service.CompletionsOf(quest), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void QuestOrder_RoundTrips_AndKeepsRising()
+        {
+            var a = _kit.Signal("A");
+            var first = _kit.Quest("First", new[] { Step("s", Count("x", a)) });
+            var second = _kit.Quest("Second", new[] { Step("s", Count("y", _kit.Signal("B"))) });
+            var service = _kit.Start();
+            service.Give(first);
+            service.Raise(a);
+            var ended = service.EndedOrderOf(first);
+
+            Load(Save());
+            Assert.That(_kit.Service.EndedOrderOf(first), Is.EqualTo(ended));
+            _kit.Service.Give(second);
+            Assert.That(_kit.Service.GivenOrderOf(second), Is.GreaterThan(ended));
+        }
+
+        [Test]
         public void AnEmptyOrDamagedSection_LoadsAsANewGame()
         {
             var quest = _kit.Quest("Opening", new[] { Step("s", Count("x", _kit.Signal("A"))) }, new QuestSettings { GivenAutomatically = true });

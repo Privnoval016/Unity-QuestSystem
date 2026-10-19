@@ -13,4 +13,12 @@ A rewrite. Version 1 is kept on the `v1` branch and the `v1.0.0` tag.
 - Saving through `QuestSystem.Saving` (Unity-SaveSystem).
 - `QuestReaction` re-applies scene state on scene and save loads.
 - Validation, with a build check; a step picker.
-- 44 tests: v1's bugs as regressions, plus a scale test.
+- Signal payloads: `Raise(signal, amount, payload)`, filtered by a signal tracker's **only when** condition.
+- Trackers declare what they can do (`ISignalCounter`, `IStateProgress`); a signal reaches only its counters.
+- Quest order (given and ended, saved), an order within a kind, `IDisplayNamed` givers and places,
+  `RewardDescription`, objective progress in `IQuestFacts`, events that name their service.
+- Hardened: one signal never completes a quest twice or flips an ended one; a throwing condition or runaway
+  conditions can't stop the rest; restores replace everything, keep damaged values in range and complete a quest
+  whose ending step is done; failed repeatable quests can be given again; a disposed service ignores changes.
+- Triggers count bodies, not colliders; reactions survive turning off their own object.
+- 63 tests: v1's bugs as regressions, edge cases, plus a scale test.
