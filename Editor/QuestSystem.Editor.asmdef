@@ -1,0 +1,20 @@
+{
+    "name": "QuestSystem.Editor",
+    "rootNamespace": "QuestSystem.EditorTools",
+    "references": [
+        "QuestSystem",
+        "Extensions",
+        "Extensions.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

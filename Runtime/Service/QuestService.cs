@@ -59,6 +59,12 @@ namespace QuestSystem
         /** <summary>The quest the player follows; null when none.</summary> */
         public QuestDefinition ActiveQuest { get; private set; }
 
+        /** <summary>The facts conditions read, the service's own included.</summary> */
+        public IFacts Facts => _facts;
+
+        /** <summary>Raised after a new game or a restore, when every state may have changed at once.</summary> */
+        public event Action OnReset = delegate { };
+
         #endregion
 
         #region Public API
@@ -186,6 +192,7 @@ namespace QuestSystem
         {
             Clear();
             CheckAll();
+            OnReset();
         }
 
         /** <summary>Captures every quest and flag as plain data.</summary> */
@@ -218,6 +225,7 @@ namespace QuestSystem
                 ActiveQuest = active?.Definition;
             }
             CheckAll();
+            OnReset();
         }
 
         #endregion

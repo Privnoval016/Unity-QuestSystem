@@ -21,6 +21,9 @@ namespace QuestSystem
 
         /** <summary>Adds what the tracker reads. Signal-only trackers read nothing.</summary> <returns>False when it can't say.</returns> */
         public virtual bool TryCollectSubjects(ICollection<IConditionSubject> subjects) => true;
+
+        /** <summary>What is missing for the tracker to ever make progress, for validation; null when nothing is.</summary> */
+        public virtual string MissingSetup => null;
     }
 
     /** <summary>Counts a signal: each time it is raised adds its amount.</summary> */
@@ -38,6 +41,9 @@ namespace QuestSystem
 
         /** <inheritdoc /> */
         public override int ProgressFrom(QuestSignal raised, int amount) => raised != null && raised == signal ? Math.Max(0, amount) : 0;
+
+        /** <inheritdoc /> */
+        public override string MissingSetup => signal == null ? "no signal" : null;
     }
 
     /** <summary>Reads a story flag: its value is the progress, so a counter flag counts and an on/off flag completes it.</summary> */
@@ -63,6 +69,9 @@ namespace QuestSystem
             if (flag != null) subjects.Add(flag);
             return true;
         }
+
+        /** <inheritdoc /> */
+        public override string MissingSetup => flag == null ? "no flag" : null;
     }
 
     /** <summary>Completes the objective while a condition holds: another quest done, a flag set, anything the game can check.</summary> */
@@ -83,5 +92,8 @@ namespace QuestSystem
 
         /** <inheritdoc /> */
         public override bool TryCollectSubjects(ICollection<IConditionSubject> subjects) => ConditionSubjects.TryCollect(condition, subjects);
+
+        /** <inheritdoc /> */
+        public override string MissingSetup => condition == null ? "no condition" : null;
     }
 }

@@ -122,6 +122,16 @@ namespace QuestSystem
         #endregion
     }
 
+    /** <summary>Shows a string field as a menu of a quest's steps; the quest is the named sibling field.</summary> */
+    public sealed class StepIdPickerAttribute : PropertyAttribute
+    {
+        /** <summary>The sibling field holding the quest.</summary> */
+        public string QuestField { get; }
+
+        /** <summary>Picks from the steps of the quest in the named sibling field.</summary> */
+        public StepIdPickerAttribute(string questField) => QuestField = questField;
+    }
+
     /** <summary>True when one of a quest's steps is in a state.</summary> */
     [Serializable]
     public sealed class StepStateCondition : ICondition<IFacts>, ISubjectReader
@@ -132,6 +142,7 @@ namespace QuestSystem
         [SerializeField] private QuestDefinition quest;
 
         [Tooltip("The step, chosen from the quest's steps.")]
+        [StepIdPicker(nameof(quest))]
         [SerializeField] private string stepId;
 
         [Tooltip("The state it must be in.")]
@@ -151,6 +162,12 @@ namespace QuestSystem
             this.stepId = stepId;
             this.state = state;
         }
+
+        /** <summary>The quest the step belongs to.</summary> */
+        public QuestDefinition Quest => quest;
+
+        /** <summary>The step's id.</summary> */
+        public string StepId => stepId;
 
         /** <inheritdoc /> */
         public bool Evaluate(IFacts context) =>

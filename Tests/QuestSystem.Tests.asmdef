@@ -4,6 +4,7 @@
     "references": [
         "QuestSystem",
         "QuestSystem.Saving",
+        "QuestSystem.Editor",
         "Extensions",
         "Extensions.Editor",
         "SaveSystem.Core",
