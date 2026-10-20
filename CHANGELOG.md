@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Menus moved under one Privnoval heading: *Tools > Privnoval > Quest System* (Quest Graph, Validate Quests), *Create > Privnoval > Quest System*, and *Add Component > Privnoval > Quest System* for triggers and reactions.
+- Menus moved under one Privnoval heading: *Tools > Privnoval > Quest System* (Quest Graph, Validate Quests),
+  *Create > Privnoval > Quest System*, and *Add Component > Privnoval > Quest System* for triggers and reactions.
 - Step links: a step starts after the step above (as before), after its linked steps (all or any), or with the
   quest. An unlock condition is a further check on links. Saves are unchanged.
 - With no step marked to end the quest, every step nothing follows ends it; a plain list still ends at its last step.

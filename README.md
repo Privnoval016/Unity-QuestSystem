@@ -145,8 +145,8 @@ fails any condition that needs one. The payload lives only for that raise.
 
 ## In scenes
 
-- **`QuestRuntime`** (*Create > Privnoval > Quest System > Quest Runtime*) is the asset scene objects reach the running service
-  through. The game binds its service to it.
+- **`QuestRuntime`** (*Create > Privnoval > Quest System > Quest Runtime*) is the asset scene objects reach the
+  running service through. The game binds its service to it.
 - **`QuestTrigger`** raises a signal when something enters or leaves its collider. It filters by layer, and by an
   `IQuestTriggerFilter` the game writes (the player only, say). It counts bodies (a rigidbody, or the collider's
   object without one), so a character with several colliders enters and leaves once.
@@ -172,7 +172,8 @@ every set flag, and the active quest, all by id.
 
 ## The quest graph
 
-*Tools > Privnoval > Quest System > Quest Graph*, or double-click a quest asset. Two screens, with back and forward between them:
+*Tools > Privnoval > Quest System > Quest Graph*, or double-click a quest asset. Two screens, with back and forward
+between them:
 
 - **The web** shows every quest in a band per kind, in the colour the kind picks (*Graph Colour* on the kind),
   wired by the conditions that read other quests. Each wire is labelled with what it asks for ("needs done", "fails
