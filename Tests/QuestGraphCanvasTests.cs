@@ -27,6 +27,20 @@ namespace QuestSystem.Tests
         }
 
         [Test]
+        public void AViewBeforeLayout_IsNeverNaN()
+        {
+            var nan = new Vector2(float.NaN, float.NaN);
+            Assert.That(CanvasView.HasSize(nan), Is.False, "an element's size is NaN before its first layout");
+            Assert.That(CanvasView.HasSize(Vector2.zero), Is.False);
+            Assert.That(CanvasView.HasSize(new Vector2(800, 600)));
+            var view = new CanvasView(nan, float.NaN);
+            Assert.That(view.Pan, Is.EqualTo(Vector2.zero));
+            Assert.That(view.Zoom, Is.EqualTo(1f));
+            var framed = CanvasView.Framing(new Rect(0, 0, 500, 300), nan);
+            Assert.That(float.IsFinite(framed.Zoom) && float.IsFinite(framed.Pan.x));
+        }
+
+        [Test]
         public void Framing_FitsTheContent_AndNeverZoomsPast100Percent()
         {
             var big = CanvasView.Framing(new Rect(0, 0, 4000, 1000), new Vector2(1000, 800));

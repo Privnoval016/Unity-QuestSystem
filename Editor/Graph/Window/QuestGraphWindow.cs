@@ -26,6 +26,9 @@ namespace QuestSystem.EditorTools
 
         #region Private Fields
 
+        /** <summary>How often the window checks whether the editor skin changed, so its colours follow.</summary> */
+        private const long SkinCheckMilliseconds = 500;
+
         private QuestIndex _index;
         private QuestScreen _questScreen;
         private QuestList _list;
@@ -44,6 +47,13 @@ namespace QuestSystem.EditorTools
             var root = rootVisualElement;
             QuestGraphStyles.Apply(root);
             root.AddToClassList("quest-graph");
+            var proSkin = EditorGUIUtility.isProSkin;
+            root.schedule.Execute(() =>
+            {
+                if (proSkin == EditorGUIUtility.isProSkin) return;
+                proSkin = EditorGUIUtility.isProSkin;
+                QuestGraphStyles.Apply(root);
+            }).Every(SkinCheckMilliseconds);
 
             var toolbar = new Toolbar();
             _back = new ToolbarButton(Back) { text = "◀", tooltip = "Back" };
@@ -52,6 +62,7 @@ namespace QuestSystem.EditorTools
             toolbar.Add(_back);
             toolbar.Add(_forward);
             toolbar.Add(_crumbs);
+            toolbar.Add(new ToolbarSpacer());
             toolbar.Add(new ToolbarButton(() => _questScreen.AddStep()) { text = "+ Step", tooltip = "Add a step" });
             toolbar.Add(new ToolbarSpacer { flex = true });
             toolbar.Add(new ToolbarButton(() => _questScreen.Tidy()) { text = "Tidy", tooltip = "Lay out the steps again" });
@@ -183,7 +194,12 @@ namespace QuestSystem.EditorTools
             var (steps, objectives, errors, warnings) = _questScreen.Counts;
             _status.text = _questScreen.Quest == null
                 ? $"{_index.Quests.Count} quests. Pick one on the left."
-                : $"{steps} steps   {objectives} objectives" + (errors > 0 ? $"   {errors} error{(errors == 1 ? "" : "s")}" : "") + (warnings > 0 ? $"   {warnings} warning{(warnings == 1 ? "" : "s")}" : "");
+                : string.Join("  ·  ", new[]
+                {
+                    $"{steps} steps", $"{objectives} objectives",
+                    errors > 0 ? $"{errors} error{(errors == 1 ? "" : "s")}" : null,
+                    warnings > 0 ? $"{warnings} warning{(warnings == 1 ? "" : "s")}" : null,
+                }.Where(part => part != null));
         }
 
         /** <summary>Checks every quest again and shows the totals.</summary> */
@@ -195,7 +211,7 @@ namespace QuestSystem.EditorTools
             _questScreen.Rebuild();
             var errors = _index.Quests.Sum(quest => _index.SummaryOf(quest)?.Errors ?? 0);
             var warnings = _index.Quests.Sum(quest => _index.SummaryOf(quest)?.Warnings ?? 0);
-            _status.text = $"{_index.Quests.Count} quests checked   {errors} error{(errors == 1 ? "" : "s")}   {warnings} warning{(warnings == 1 ? "" : "s")}";
+            _status.text = $"{_index.Quests.Count} quests checked  ·  {errors} error{(errors == 1 ? "" : "s")}  ·  {warnings} warning{(warnings == 1 ? "" : "s")}";
         }
 
         private static QuestDefinition QuestOf(string guid) =>

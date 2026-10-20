@@ -91,8 +91,14 @@ namespace QuestSystem.EditorTools
             OnViewChanged(_view);
         }
 
-        /** <summary>Fits a content rect in the canvas.</summary> */
-        public void Frame(Rect content) => SetView(CanvasView.Framing(content, layout.size));
+        /** <summary>Fits a content rect in the canvas; does nothing before the canvas has a size.</summary> */
+        public void Frame(Rect content)
+        {
+            if (CanvasView.HasSize(layout.size)) SetView(CanvasView.Framing(content, layout.size));
+        }
+
+        /** <summary>True once the canvas has been laid out and has a size.</summary> */
+        public bool HasSize => CanvasView.HasSize(layout.size);
 
         /** <summary>A point in the canvas's own space, in content space.</summary> */
         public Vector2 ToContent(Vector2 local) => _view.ToContent(local);
@@ -100,6 +106,12 @@ namespace QuestSystem.EditorTools
         /** <summary>Hides nodes and labels off screen, and shows those that came back. Call after adding or moving many.</summary> */
         public void Cull()
         {
+            if (!HasSize)
+            {
+                foreach (var child in Nodes.Children()) child.visible = true;
+                foreach (var child in Labels.Children()) child.visible = true;
+                return;
+            }
             var visible = _view.Visible(layout.size);
             var margin = new Rect(visible.x - CullMargin, visible.y - CullMargin, visible.width + CullMargin * 2f, visible.height + CullMargin * 2f);
             CullChildren(Nodes, margin);
@@ -191,6 +203,12 @@ namespace QuestSystem.EditorTools
         {
             foreach (var child in layer.Children())
             {
+                // An element added since the last layout has no size yet; show it until it can be measured.
+                if (!CanvasView.HasSize(child.layout.size))
+                {
+                    child.visible = true;
+                    continue;
+                }
                 var rect = new Rect(child.resolvedStyle.left, child.resolvedStyle.top, child.layout.width, child.layout.height);
                 child.visible = rect.Overlaps(visible);
             }

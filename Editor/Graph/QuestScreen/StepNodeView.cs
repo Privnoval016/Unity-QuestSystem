@@ -90,7 +90,16 @@ namespace QuestSystem.EditorTools
                 row.Add(dot);
                 var text = new VisualElement();
                 text.AddToClassList("quest-graph__objective-text");
-                text.Add(new Label(objective.Optional ? objective.Text + "  optional" : objective.Text));
+                var line = new VisualElement();
+                line.AddToClassList("quest-graph__objective-line");
+                line.Add(new Label(objective.Text));
+                if (objective.Optional)
+                {
+                    var optional = new Label("optional");
+                    optional.AddToClassList("quest-graph__objective-optional");
+                    line.Add(optional);
+                }
+                text.Add(line);
                 var tracker = new Label(objective.Tracker);
                 tracker.AddToClassList("quest-graph__tracker");
                 text.Add(tracker);

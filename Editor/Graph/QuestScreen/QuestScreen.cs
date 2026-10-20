@@ -17,6 +17,12 @@ namespace QuestSystem.EditorTools
         #region Private Fields
 
         private const float WireHitDistance = 6f;
+
+        /** <summary>The smallest zoom a quest opens at; framing everything with A can go smaller.</summary> */
+        private const float OpeningZoom = 0.8f;
+
+        /** <summary>Space kept between framed content and the canvas's edges and summary bar.</summary> */
+        private const float FrameMargin = 24f;
         private const int MaxStubsPerStep = 3;
         private const float StubGap = 40f;
         private const float StubHeight = 24f;
@@ -140,6 +146,7 @@ namespace QuestSystem.EditorTools
                 var node = new StepNodeView(card);
                 _nodes[card.Id] = node;
                 node.SetSelected(_selected.Contains(card.Id));
+                node.RegisterCallback<GeometryChangedEvent>(_ => FrameIfWaiting());
                 HookNode(node);
                 _canvas.Nodes.Add(node);
             }
@@ -152,14 +159,25 @@ namespace QuestSystem.EditorTools
             OnRebuilt();
         }
 
-        /** <summary>Frames the selected steps, or all of them when none is selected.</summary> */
-        public void Frame(bool selectionOnly = true)
+        /**
+         * <summary>Frames the selected steps, or everything (stubs included) when none is selected: below the summary
+         * bar, centred across when it fits, otherwise from the left. A quest opening never goes below 80%.</summary>
+         */
+        public void Frame(bool selectionOnly = true, bool opening = false)
         {
-            var nodes = _nodes.Values.Where(node => !selectionOnly || _selected.Count == 0 || _selected.Contains(node.StepId)).ToList();
-            if (nodes.Count == 0) return;
-            var bounds = nodes.Select(NodeRect).Aggregate((a, b) => Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin), Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax)));
-            bounds.yMin -= StepLayout.Origin.y - 20f;
-            _canvas.Frame(bounds);
+            if (!_canvas.HasSize) return;
+            var elements = selectionOnly && _selected.Count > 0
+                ? _selected.Select(id => (VisualElement)_nodes[id]).ToList()
+                : _canvas.Nodes.Children().ToList();
+            if (elements.Count == 0) return;
+            var bounds = elements.Select(ElementRect).Aggregate((a, b) => Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin), Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax)));
+            var top = _summary.layout.yMax + FrameMargin;
+            var area = new Vector2(_canvas.layout.width - FrameMargin * 2f, _canvas.layout.height - top - FrameMargin);
+            var fit = Mathf.Min(area.x / bounds.width, area.y / bounds.height);
+            var zoom = Mathf.Clamp(fit, opening ? OpeningZoom : CanvasView.MinZoom, 1f);
+            var width = bounds.width * zoom;
+            var x = width <= area.x ? FrameMargin + (area.x - width) / 2f : FrameMargin;
+            _canvas.SetView(new CanvasView(new Vector2(x - bounds.xMin * zoom, top - bounds.yMin * zoom), zoom));
         }
 
         /** <summary>Lays the steps out again and saves where they went, as one Undo step.</summary> */
@@ -369,7 +387,7 @@ namespace QuestSystem.EditorTools
             var readers = _index.ReadersOf(_quest).Where(link => link.Reader != _quest && link.ReadStepId != null && _nodes.ContainsKey(link.ReadStepId))
                 .GroupBy(link => link.ReadStepId);
             foreach (var group in readers)
-                AddStubs(_nodes[group.Key], group.GroupBy(link => link.Reader).Select(g => g.First()).Select(link => (link.Reader, $"reads this step: {link.Label}")).ToList(), false);
+                AddStubs(_nodes[group.Key], group.GroupBy(link => link.Reader).Select(g => g.First()).Select(link => (link.Reader, link.Label)).ToList(), false);
             var reads = summary.Reads.Where(link => link.ReaderStepId != null && link.Read != _quest && _nodes.ContainsKey(link.ReaderStepId)).GroupBy(link => link.ReaderStepId);
             foreach (var group in reads)
                 AddStubs(_nodes[group.Key], group.GroupBy(link => link.Read).Select(g => g.First()).Select(link => (link.Read, link.Label)).ToList(), true);
@@ -631,12 +649,16 @@ namespace QuestSystem.EditorTools
 
         private void FrameIfWaiting()
         {
-            if (!_frameOnLayout || _canvas.layout.width <= 0f || _nodes.Count == 0) return;
+            if (!_frameOnLayout || !_canvas.HasSize || _nodes.Count == 0 || !CanvasView.HasSize(_summary.layout.size)) return;
+            if (_canvas.Nodes.Children().Any(element => !CanvasView.HasSize(element.layout.size))) return;
             _frameOnLayout = false;
-            _canvas.schedule.Execute(() => Frame(false));
+            _canvas.schedule.Execute(() => Frame(false, true));
         }
 
         private static Rect NodeRect(StepNodeView node) => new Rect(node.Position, new Vector2(StepNodeView.Width, Mathf.Max(node.layout.height, 40f)));
+
+        private static Rect ElementRect(VisualElement element) =>
+            new Rect(element.resolvedStyle.left, element.resolvedStyle.top, CanvasView.HasSize(element.layout.size) ? element.layout.width : StepNodeView.Width, CanvasView.HasSize(element.layout.size) ? element.layout.height : 40f);
 
         private static Vector2 Snap(Vector2 position) => new Vector2(Mathf.Round(position.x / 10f) * 10f, Mathf.Round(position.y / 10f) * 10f);
 

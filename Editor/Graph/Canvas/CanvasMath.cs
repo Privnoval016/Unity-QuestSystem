@@ -20,12 +20,15 @@ namespace QuestSystem.EditorTools
         /** <summary>The smallest and largest zoom.</summary> */
         public const float MinZoom = 0.25f, MaxZoom = 2f;
 
-        /** <summary>Makes a view; zoom is kept within its limits.</summary> */
+        /** <summary>Makes a view; zoom is kept within its limits, and a value that isn't a number falls back to no pan and 100%.</summary> */
         public CanvasView(Vector2 pan, float zoom)
         {
-            Pan = pan;
-            Zoom = Mathf.Clamp(zoom, MinZoom, MaxZoom);
+            Pan = float.IsFinite(pan.x) && float.IsFinite(pan.y) ? pan : Vector2.zero;
+            Zoom = float.IsFinite(zoom) ? Mathf.Clamp(zoom, MinZoom, MaxZoom) : 1f;
         }
+
+        /** <summary>True when a viewport has a real size; before its first layout it has none.</summary> */
+        public static bool HasSize(Vector2 viewportSize) => float.IsFinite(viewportSize.x) && float.IsFinite(viewportSize.y) && viewportSize.x > 0f && viewportSize.y > 0f;
 
         /** <summary>A screen point in content space.</summary> */
         public Vector2 ToContent(Vector2 screen) => (screen - Pan) / Zoom;

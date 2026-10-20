@@ -372,6 +372,7 @@
 .quest-graph__pill--end-implicit {
     border-color: var(--qg-ghost);
     color: var(--qg-end);
+    -unity-font-style: bold-and-italic;
 }
 
 .quest-graph__node-body {
@@ -398,6 +399,18 @@
 
 .quest-graph__objective-text {
     flex-shrink: 1;
+}
+
+.quest-graph__objective-line {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.quest-graph__objective-optional {
+    color: var(--qg-dim);
+    font-size: 11px;
+    margin-left: 5px;
+    -unity-font-style: italic;
 }
 
 .quest-graph__tracker {
