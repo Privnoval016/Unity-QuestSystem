@@ -26,12 +26,12 @@ None is auto-referenced.
 
 | Asset or type | What it is |
 |---|---|
-| **`QuestDefinition`** (*Create > Quests > Quest*) | A quest: title, summary, kind, order within its kind, giver and place, suggested level, steps, rewards, and when it can be given or fails. Repeatable or not; hidden until given or not |
+| **`QuestDefinition`** (*Create > Privnoval > Quest System > Quest*) | A quest: title, summary, kind, order within its kind, giver and place, suggested level, steps, rewards, and when it can be given or fails. Repeatable or not; hidden until given or not |
 | **`QuestStep`** (inside the quest) | A stage. It starts after the step above, after its linked steps, or with the quest (below). It completes when all its required objectives are done, or any one. It can fail, which fails the quest. It can end the quest |
 | **`QuestObjective`** (inside a step) | One thing a step asks for, counted by a tracker up to a target. Optional (bonus) objectives never hold a step back |
-| **`StoryFlag`** (*Create > Quests > Story Flag*) | A whole number about the story, 0 when unset. Set by quests and the game, read by conditions and trackers |
-| **`QuestSignal`** (*Create > Quests > Quest Signal*) | Something that happens: a wolf defeated, a place reached. Raised by game code or a `QuestTrigger` |
-| **`QuestKind`** (*Create > Quests > Quest Kind*) | Main story, errand, and so on, with an order. A game lists quests by kind |
+| **`StoryFlag`** (*Create > Privnoval > Quest System > Story Flag*) | A whole number about the story, 0 when unset. Set by quests and the game, read by conditions and trackers |
+| **`QuestSignal`** (*Create > Privnoval > Quest System > Quest Signal*) | Something that happens: a wolf defeated, a place reached. Raised by game code or a `QuestTrigger` |
+| **`QuestKind`** (*Create > Privnoval > Quest System > Quest Kind*) | Main story, errand, and so on, with an order. A game lists quests by kind |
 
 **Ids.** Steps and objectives get ids the editor assigns, unique in their quest; a duplicated step gets fresh ones.
 Quests, kinds and flags get asset ids from Extensions. Saves point at ids, so renaming anything is safe.
@@ -145,7 +145,7 @@ fails any condition that needs one. The payload lives only for that raise.
 
 ## In scenes
 
-- **`QuestRuntime`** (*Create > Quests > Quest Runtime*) is the asset scene objects reach the running service
+- **`QuestRuntime`** (*Create > Privnoval > Quest System > Quest Runtime*) is the asset scene objects reach the running service
   through. The game binds its service to it.
 - **`QuestTrigger`** raises a signal when something enters or leaves its collider. It filters by layer, and by an
   `IQuestTriggerFilter` the game writes (the player only, say). It counts bodies (a rigidbody, or the collider's
@@ -172,7 +172,7 @@ every set flag, and the active quest, all by id.
 
 ## The quest graph
 
-*Window > Quests > Quest Graph*, or double-click a quest asset. Two screens, with back and forward between them:
+*Tools > Privnoval > Quest System > Quest Graph*, or double-click a quest asset. Two screens, with back and forward between them:
 
 - **The web** shows every quest in a band per kind, in the colour the kind picks (*Graph Colour* on the kind),
   wired by the conditions that read other quests. Each wire is labelled with what it asks for ("needs done", "fails
@@ -204,7 +204,7 @@ every set flag, and the active quest, all by id.
 
 ## Validation
 
-*Tools > Quests > Validate Quests* logs problems. Errors also fail a build:
+*Tools > Privnoval > Quest System > Validate Quests* logs problems. Errors also fail a build:
 
 - a quest with no asset id (it couldn't be saved);
 - an empty step or objective slot;

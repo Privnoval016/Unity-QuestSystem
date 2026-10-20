@@ -7,7 +7,7 @@ namespace QuestSystem
      * <summary>The asset scene objects reach the running quest service through. The game binds its service to it when
      * the game starts; triggers and reactions in any scene reference this asset.</summary>
      */
-    [CreateAssetMenu(menuName = "Quests/Quest Runtime", fileName = "QuestRuntime")]
+    [CreateAssetMenu(menuName = QuestMenus.Create + "Quest Runtime", fileName = "QuestRuntime")]
     public sealed class QuestRuntime : ScriptableObject
     {
         #region Properties

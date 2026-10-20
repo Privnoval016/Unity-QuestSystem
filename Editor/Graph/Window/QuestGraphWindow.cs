@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Extensions.Menus;
 using UnityEditor;
 using UnityEditor.Callbacks;
 using UnityEditor.UIElements;
@@ -10,7 +11,7 @@ namespace QuestSystem.EditorTools
 {
     /**
      * <summary>The quest graph window: the web of every quest, or one quest's steps to edit, with back and forward
-     * between them. Opens from <i>Window &gt; Quests &gt; Quest Graph</i> and by double-clicking a quest. Where it was
+     * between them. Opens from <i>Tools &gt; Privnoval &gt; Quest System &gt; Quest Graph</i> and by double-clicking a quest. Where it was
      * survives domain reloads.</summary>
      */
     public sealed class QuestGraphWindow : EditorWindow
@@ -124,7 +125,7 @@ namespace QuestSystem.EditorTools
         #region Public API
 
         /** <summary>Opens the window on the web.</summary> */
-        [MenuItem("Window/Quests/Quest Graph")]
+        [MenuItem(QuestMenus.Tools + "Quest Graph", priority = ToolMenus.Windows)]
         public static void OpenWindow() => GetWindow<QuestGraphWindow>("Quest Graph");
 
         /** <summary>Opens the window on a quest.</summary> */

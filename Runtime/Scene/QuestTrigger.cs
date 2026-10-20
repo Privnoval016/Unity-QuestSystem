@@ -20,6 +20,7 @@ namespace QuestSystem
      * </remarks>
      */
     [DisallowMultipleComponent]
+    [AddComponentMenu(QuestMenus.Component + "Quest Trigger")]
     public sealed class QuestTrigger : MonoBehaviour
     {
         #region Inspector Fields

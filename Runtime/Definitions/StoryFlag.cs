@@ -5,7 +5,7 @@ using UnityEngine;
 namespace QuestSystem
 {
     /** <summary>A fact about the story that quests and the game set and read: a whole number, 0 when unset.</summary> */
-    [CreateAssetMenu(menuName = "Quests/Story Flag", fileName = "StoryFlag")]
+    [CreateAssetMenu(menuName = QuestMenus.Create + "Story Flag", fileName = "StoryFlag")]
     public sealed class StoryFlag : ScriptableObject, IIdentifiedAsset, IConditionSubject
     {
         #region Inspector Fields

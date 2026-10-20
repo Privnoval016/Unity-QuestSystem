@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Extensions.Menus;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
@@ -36,7 +37,7 @@ namespace QuestSystem.EditorTools
 
         #region Helpers
 
-        [MenuItem("Tools/Quests/Validate Quests")]
+        [MenuItem(QuestMenus.Tools + "Validate Quests", priority = ToolMenus.Commands)]
         private static void ValidateFromMenu()
         {
             var issues = QuestValidator.ValidateAll(FindQuests());

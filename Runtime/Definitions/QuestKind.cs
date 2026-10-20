@@ -21,7 +21,7 @@ namespace QuestSystem
     }
 
     /** <summary>A kind of quest, such as main story or errand. A game lists quests by kind, in this order.</summary> */
-    [CreateAssetMenu(menuName = "Quests/Quest Kind", fileName = "QuestKind")]
+    [CreateAssetMenu(menuName = QuestMenus.Create + "Quest Kind", fileName = "QuestKind")]
     public sealed class QuestKind : ScriptableObject, IIdentifiedAsset, IDisplayNamed
     {
         #region Inspector Fields

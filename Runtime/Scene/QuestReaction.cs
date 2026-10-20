@@ -22,6 +22,7 @@ namespace QuestSystem
      * </remarks>
      */
     [DisallowMultipleComponent]
+    [AddComponentMenu(QuestMenus.Component + "Quest Reaction")]
     public sealed class QuestReaction : MonoBehaviour
     {
         #region Inspector Fields

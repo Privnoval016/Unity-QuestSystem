@@ -9,7 +9,7 @@ using Object = UnityEngine.Object;
 namespace QuestSystem
 {
     /** <summary>A quest: who gives it and where, its steps, what it rewards, and when it can be given or fails.</summary> */
-    [CreateAssetMenu(menuName = "Quests/Quest", fileName = "Quest")]
+    [CreateAssetMenu(menuName = QuestMenus.Create + "Quest", fileName = "Quest")]
     public sealed class QuestDefinition : ScriptableObject, IIdentifiedAsset, IConditionSubject
     {
         #region Inspector Fields
