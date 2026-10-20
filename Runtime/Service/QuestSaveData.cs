@@ -1,10 +1,11 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine.Scripting;
 
 namespace QuestSystem
 {
     /** <summary>Everything the quest service saves, as plain data. Assets are named by their asset ids.</summary> */
-    [Serializable]
+    [Serializable, Preserve]
     public sealed class QuestSaveData
     {
         /** <summary>Every quest that has been given at least once.</summary> */
@@ -18,7 +19,7 @@ namespace QuestSystem
     }
 
     /** <summary>One quest's saved state.</summary> */
-    [Serializable]
+    [Serializable, Preserve]
     public sealed class QuestEntry
     {
         /** <summary>The quest's asset id.</summary> */
@@ -44,7 +45,7 @@ namespace QuestSystem
     }
 
     /** <summary>One step's saved state.</summary> */
-    [Serializable]
+    [Serializable, Preserve]
     public sealed class StepEntry
     {
         /** <summary>The step's id.</summary> */
@@ -55,7 +56,7 @@ namespace QuestSystem
     }
 
     /** <summary>One objective's saved progress.</summary> */
-    [Serializable]
+    [Serializable, Preserve]
     public sealed class ObjectiveEntry
     {
         /** <summary>The objective's id.</summary> */
@@ -66,7 +67,7 @@ namespace QuestSystem
     }
 
     /** <summary>One flag's saved value.</summary> */
-    [Serializable]
+    [Serializable, Preserve]
     public sealed class FlagEntry
     {
         /** <summary>The flag's asset id.</summary> */

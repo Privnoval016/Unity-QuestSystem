@@ -238,6 +238,7 @@ namespace QuestSystem
             data.Quests.AddRange(_unknownQuests);
             foreach (var pair in _flags)
                 if (!pair.Key.AssetId.IsEmpty) data.Flags.Add(new FlagEntry { Flag = pair.Key.AssetId.Value, Value = pair.Value });
+            data.Flags.Sort((a, b) => string.CompareOrdinal(a.Flag, b.Flag));
             data.Flags.AddRange(_unknownFlags);
             return data;
         }

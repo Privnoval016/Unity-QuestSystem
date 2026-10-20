@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Saved flags are written in id order, so the same state always saves the same; the save data classes are kept from IL2CPP stripping.
 - `QuestDefinition.Configure` is public, so other assemblies can build quests in code (generated quests, tests).
 - Menus moved under one Privnoval heading: *Tools > Privnoval > Quest System* (Quest Graph, Validate Quests),
   *Create > Privnoval > Quest System*, and *Add Component > Privnoval > Quest System* for triggers and reactions.
