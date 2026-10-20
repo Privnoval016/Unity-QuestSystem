@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `QuestDefinition.Configure` is public, so other assemblies can build quests in code (generated quests, tests).
 - Menus moved under one Privnoval heading: *Tools > Privnoval > Quest System* (Quest Graph, Validate Quests),
   *Create > Privnoval > Quest System*, and *Add Component > Privnoval > Quest System* for triggers and reactions.
 - Step links: a step starts after the step above (as before), after its linked steps (all or any), or with the

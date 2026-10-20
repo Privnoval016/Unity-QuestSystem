@@ -152,8 +152,8 @@ namespace QuestSystem
 
         #region Public API
 
-        /** <summary>Sets the quest up in code, as tests and tools do.</summary> */
-        internal void Configure(IEnumerable<QuestStep> questSteps, QuestSettings settings = default)
+        /** <summary>Sets the quest up in code: generated quests, and tests in other assemblies.</summary> */
+        public void Configure(IEnumerable<QuestStep> questSteps, QuestSettings settings = default)
         {
             steps = new List<QuestStep>(questSteps ?? Array.Empty<QuestStep>());
             rewards = new List<IQuestReward>(settings.Rewards ?? Array.Empty<IQuestReward>());
