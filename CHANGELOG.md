@@ -10,8 +10,9 @@
 - `IQuestReference` and `QuestReferences`: tools find which quests and steps a condition reads. Trackers hand over
   the conditions they hold. Conditions and trackers summarize themselves in one line.
 - The validator finds loops through step conditions as well as links; an Or offering another way isn't a loop.
-- Editor groundwork for the quest graph: a quest index kept current one asset at a time, and every graph edit
-  (add, link, unlink, delete with rewiring, copy and paste between quests, web links, bulk edits) as one Undo step.
+- The quest graph (*Window > Quests > Quest Graph*): the web of every quest, and one quest's steps to edit, on a
+  custom canvas that follows the editor skin. Every edit is one Undo step; the Inspector shows the selected step.
+  Built on a quest index kept current one asset at a time.
 
 ## 2.0.0 (2026-10-19)
 

@@ -17,7 +17,7 @@ Version 2; version 1 is kept on the `v1` branch and the `v1.0.0` tag.
 |---|---|---|
 | `QuestSystem` | `Runtime/` | Definitions, the quest service, trackers, conditions, events, scene triggers and reactions |
 | `QuestSystem.Saving` | `Saving/` | `QuestSaveSection`, for Unity-SaveSystem |
-| `QuestSystem.Editor` | `Editor/` | Validation and its build check, the step picker |
+| `QuestSystem.Editor` | `Editor/` | The quest graph (`Graph/`), the quest Inspector and step picker (`Inspector/`), validation and its build check (`Validation/`) |
 | `QuestSystem.Tests` | `Tests/` | EditMode tests |
 
 None is auto-referenced.
@@ -168,6 +168,35 @@ every set flag, and the active quest, all by id.
 - **Damaged values** are kept in range: an unknown state reads as the start, progress stays within its target.
 - **Restoring replaces everything,** even on a service already in use.
 - **A new game** restores an empty section, which clears everything.
+
+## The quest graph
+
+*Window > Quests > Quest Graph*, or double-click a quest asset. Two screens, with back and forward between them:
+
+- **The web** shows every quest in a band per kind, wired by the conditions that read other quests. Each wire is
+  labelled with what it asks for ("needs done", "fails if done", "needs step done"). Labels never cover a quest,
+  another label, another wire or an arrowhead.
+  - **Views:** dependencies, or story flags with the quests that read each.
+  - **Find:** search titles and steps, filter by kind or property, click a quest to focus its direct links or whole
+    chain, and press Enter or double-click to open it.
+  - **Edit:** drag quests to pin them (Tidy lays the rest out again), drag a quest's handle onto another to make it
+    available only once the first is done (the new condition is shown first, then joined with And), edit the kind,
+    giver or place of several quests at once, and right-click a band to make a new quest of that kind.
+- **A quest** shows its steps as nodes wired by what they follow, with a summary bar of what it needs and what reads
+  it, and a quest list to jump between quests.
+  - **Nodes** show objectives with what counts, start and fail rules in brief, pills (after any, any one of, ends,
+    shown early) and problems.
+  - **Edit:** drag an output onto a step to link it, or onto empty canvas to add a step after it; select a link and
+    press Delete to remove it; copy, paste and duplicate steps, within a quest or into another; Tidy.
+  - **Details:** selecting a step shows only that step in the Inspector (drawn by Odin where it is installed).
+- **Controls:** the middle mouse or Alt-drag pans, the wheel zooms, dragging on empty canvas selects, F frames the
+  selection and A everything.
+- **Safety:** every change is one Undo step. Deleting a step rewires the steps after it to keep their order, and
+  notes any other quest that reads it. Nothing opens a dialog, and opening the graph never changes an asset.
+- **Positions** are saved in the assets (steps' places in their quest, pinned quests' places in the web), on a
+  10-unit grid so moves make small diffs. The game never reads them.
+- **Custom conditions** on quests implement `IQuestReference` to appear as wires; a condition that can't say what it
+  reads is counted in the status bar instead.
 
 ## Validation
 
