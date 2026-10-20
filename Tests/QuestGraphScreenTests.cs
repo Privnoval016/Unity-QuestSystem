@@ -77,6 +77,7 @@ namespace QuestSystem.Tests
         [UnityTest]
         public IEnumerator TheWindow_OpensOnASavedQuest_AndDrawsItsStepsAndLinks()
         {
+            if (Application.isBatchMode) Assert.Ignore("Editor windows need a graphics device, which a headless run doesn't have.");
             AssetDatabase.CreateFolder("Assets", "__QuestGraphSmoke");
             var quest = ScriptableObject.CreateInstance<QuestDefinition>();
             quest.Configure(new[] { Step("a", Count("x", _kit.Signal("A"))), Step("b", After("a")), Step("c", After("a")), Step("d", After("b", "c")) }, new QuestSettings { Title = "Smoke" });
