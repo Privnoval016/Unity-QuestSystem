@@ -27,16 +27,20 @@ namespace QuestSystem.EditorTools
         /** <summary>What is wrong, naming the step or objective.</summary> */
         public string Problem { get; }
 
+        /** <summary>The step it is about; null when it is about the whole quest.</summary> */
+        public string StepId { get; }
+
         #endregion
 
         #region Public API
 
-        /** <summary>Makes an issue.</summary> */
-        public QuestIssue(QuestIssueLevel level, QuestDefinition quest, string problem)
+        /** <summary>Makes an issue, about one step when given its id.</summary> */
+        public QuestIssue(QuestIssueLevel level, QuestDefinition quest, string problem, string stepId = null)
         {
             Level = level;
             Quest = quest;
             Problem = problem;
+            StepId = stepId;
         }
 
         /** <inheritdoc /> */
@@ -69,15 +73,15 @@ namespace QuestSystem.EditorTools
                     issues.Add(Error(quest, $"{label} is empty"));
                     continue;
                 }
-                if (step.Objectives.Count == 0) issues.Add(Warning(quest, $"{label} has no objectives, so it completes the moment it starts"));
+                if (step.Objectives.Count == 0) issues.Add(Warning(quest, $"{label} has no objectives, so it completes the moment it starts", step.Id));
                 ValidateLinks(quest, step, label, issues);
                 for (var j = 0; j < step.Objectives.Count; j++)
                 {
                     var objective = step.Objectives[j];
                     var objectiveLabel = $"{label}, objective {j + 1}";
-                    if (objective == null) issues.Add(Error(quest, $"{objectiveLabel} is empty"));
-                    else if (objective.Tracker == null) issues.Add(Error(quest, $"{objectiveLabel} has no tracker, so it never progresses"));
-                    else if (objective.Tracker.MissingSetup != null) issues.Add(Error(quest, $"{objectiveLabel}: {objective.Tracker.MissingSetup}"));
+                    if (objective == null) issues.Add(Error(quest, $"{objectiveLabel} is empty", step.Id));
+                    else if (objective.Tracker == null) issues.Add(Error(quest, $"{objectiveLabel} has no tracker, so it never progresses", step.Id));
+                    else if (objective.Tracker.MissingSetup != null) issues.Add(Error(quest, $"{objectiveLabel}: {objective.Tracker.MissingSetup}", step.Id));
                 }
             }
             ValidateGraph(quest, issues);
@@ -94,15 +98,15 @@ namespace QuestSystem.EditorTools
         private static void ValidateLinks(QuestDefinition quest, QuestStep step, string label, List<QuestIssue> issues)
         {
             if (step.Start != StepStart.AfterLinkedSteps) return;
-            if (step.After.Count == 0) issues.Add(Error(quest, $"{label} starts after linked steps but has no links"));
+            if (step.After.Count == 0) issues.Add(Error(quest, $"{label} starts after linked steps but has no links", step.Id));
             var seen = new HashSet<string>();
             foreach (var id in step.After)
             {
-                if (id == step.Id) issues.Add(Error(quest, $"{label} is linked to itself"));
-                else if (quest.FindStep(id) == null) issues.Add(Error(quest, $"{label} is linked to a step that doesn't exist ({id})"));
-                if (!seen.Add(id ?? string.Empty)) issues.Add(Error(quest, $"{label} is linked to the same step twice"));
+                if (id == step.Id) issues.Add(Error(quest, $"{label} is linked to itself", step.Id));
+                else if (quest.FindStep(id) == null) issues.Add(Error(quest, $"{label} is linked to a step that doesn't exist ({id})", step.Id));
+                if (!seen.Add(id ?? string.Empty)) issues.Add(Error(quest, $"{label} is linked to the same step twice", step.Id));
             }
-            if (step.AfterRule == StepJoin.Any && step.After.Count == 1) issues.Add(Warning(quest, $"{label} starts after any of one linked step"));
+            if (step.AfterRule == StepJoin.Any && step.After.Count == 1) issues.Add(Warning(quest, $"{label} starts after any of one linked step", step.Id));
         }
 
         /** <summary>Steps waiting on each other, steps nothing can start, and endings nobody marked.</summary> */
@@ -117,9 +121,11 @@ namespace QuestSystem.EditorTools
             foreach (var cycle in Cycles(record))
             {
                 waiting.UnionWith(cycle);
-                issues.Add(Error(quest, cycle.Count == 1
+                var message = cycle.Count == 1
                     ? $"{labels[cycle[0]]} waits on itself, so it never starts"
-                    : $"{string.Join(", ", cycle.Select(step => labels[step]))} wait on each other, so none starts"));
+                    : $"{string.Join(", ", cycle.Select(step => labels[step]))} wait on each other, so none starts";
+                foreach (var step in cycle)
+                    issues.Add(Error(quest, message, step.Definition.Id));
             }
 
             var reached = new HashSet<StepRecord>();
@@ -132,7 +138,7 @@ namespace QuestSystem.EditorTools
                     if (dependant.Definition.AfterRule == StepJoin.Any || dependant.Follows.All(reached.Contains) || StartsWithoutFollowed(dependant)) open.Push(dependant);
             }
             foreach (var step in record.Steps.Where(step => !reached.Contains(step) && !waiting.Contains(step)))
-                issues.Add(Warning(quest, $"{labels[step]} can never start"));
+                issues.Add(Warning(quest, $"{labels[step]} can never start", step.Definition.Id));
 
             if (!quest.Steps.Any(step => step != null && step.EndsQuest))
             {
@@ -183,9 +189,9 @@ namespace QuestSystem.EditorTools
             return cycles;
         }
 
-        private static QuestIssue Error(QuestDefinition quest, string problem) => new QuestIssue(QuestIssueLevel.Error, quest, problem);
+        private static QuestIssue Error(QuestDefinition quest, string problem, string stepId = null) => new QuestIssue(QuestIssueLevel.Error, quest, problem, stepId);
 
-        private static QuestIssue Warning(QuestDefinition quest, string problem) => new QuestIssue(QuestIssueLevel.Warning, quest, problem);
+        private static QuestIssue Warning(QuestDefinition quest, string problem, string stepId = null) => new QuestIssue(QuestIssueLevel.Warning, quest, problem, stepId);
 
         #endregion
     }
