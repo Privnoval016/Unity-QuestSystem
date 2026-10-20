@@ -1,0 +1,111 @@
+/* The quest graph's look. Skin colours are variables set by .quest-graph--dark and .quest-graph--light; everything
+   else uses Unity's own editor variables, so the window follows the editor. */
+
+.quest-graph--dark {
+    --qg-canvas: #1e1e1e;
+    --qg-grid-minor: rgba(255, 255, 255, 0.025);
+    --qg-grid-major: rgba(255, 255, 255, 0.055);
+    --qg-node: #3f3f3f;
+    --qg-node-head: #323232;
+    --qg-node-line: #161616;
+    --qg-text: #e2e2e2;
+    --qg-dim: #b4b4b4;
+    --qg-wire: #9a9a9a;
+    --qg-any: #5fd0c8;
+    --qg-fails: #ff8a80;
+    --qg-flag: #e4b25a;
+    --qg-ghost: #8a8a8a;
+    --qg-select: #3d7bc4;
+    --qg-end: #7fb0f0;
+    --qg-error: #ff8a80;
+    --qg-error-fill: #b8332b;
+    --qg-warn: #f0c45a;
+    --qg-warn-fill: #e2b33c;
+    --qg-main: #5b8fd9;
+    --qg-errand: #5fb07c;
+    --qg-side: #b07fd0;
+}
+
+.quest-graph--light {
+    --qg-canvas: #d4d4d4;
+    --qg-grid-minor: rgba(0, 0, 0, 0.04);
+    --qg-grid-major: rgba(0, 0, 0, 0.08);
+    --qg-node: #f7f7f7;
+    --qg-node-head: #e6e6e6;
+    --qg-node-line: #8f8f8f;
+    --qg-text: #111111;
+    --qg-dim: #3f3f3f;
+    --qg-wire: #5f5f5f;
+    --qg-any: #146b6b;
+    --qg-fails: #a8221d;
+    --qg-flag: #8a5a00;
+    --qg-ghost: #6a6a6a;
+    --qg-select: #2f67a8;
+    --qg-end: #2f67a8;
+    --qg-error: #a8221d;
+    --qg-error-fill: #c4302b;
+    --qg-warn: #7a5200;
+    --qg-warn-fill: #e0b23a;
+    --qg-main: #3f6fb5;
+    --qg-errand: #3f8a5a;
+    --qg-side: #8a5aa8;
+}
+
+.quest-graph__canvas {
+    flex-grow: 1;
+    overflow: hidden;
+    background-color: var(--qg-canvas);
+}
+
+.quest-graph__grid {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    --grid-minor: var(--qg-grid-minor);
+    --grid-major: var(--qg-grid-major);
+}
+
+.quest-graph__content {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
+}
+
+.quest-graph__layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.quest-graph__wires {
+    --wire-normal: var(--qg-wire);
+    --wire-any: var(--qg-any);
+    --wire-fails: var(--qg-fails);
+    --wire-flag: var(--qg-flag);
+    --wire-ghost: var(--qg-ghost);
+    --wire-select: var(--qg-select);
+}
+
+.quest-graph__marquee {
+    position: absolute;
+    border-width: 1px;
+    border-color: var(--qg-select);
+    background-color: rgba(61, 123, 196, 0.15);
+}
+
+.quest-graph__label {
+    position: absolute;
+    font-size: 10px;
+    -unity-font-style: bold;
+    color: var(--qg-text);
+    background-color: var(--qg-node);
+    border-width: 1px;
+    border-color: var(--qg-wire);
+    border-radius: 8px;
+    padding: 0 7px;
+    height: 16px;
+    -unity-text-align: middle-center;
+}
