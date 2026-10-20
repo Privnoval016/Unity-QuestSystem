@@ -24,6 +24,13 @@
     --qg-main: #5b8fd9;
     --qg-errand: #5fb07c;
     --qg-side: #b07fd0;
+    --qg-kind-0: #5b8fd9;
+    --qg-kind-1: #5fb07c;
+    --qg-kind-2: #b07fd0;
+    --qg-kind-3: #e4b25a;
+    --qg-kind-4: #5fd0c8;
+    --qg-kind-5: #e07a9a;
+    --qg-kind-none: #8a8a8a;
 }
 
 .quest-graph--light {
@@ -49,6 +56,13 @@
     --qg-main: #3f6fb5;
     --qg-errand: #3f8a5a;
     --qg-side: #8a5aa8;
+    --qg-kind-0: #3f6fb5;
+    --qg-kind-1: #3f8a5a;
+    --qg-kind-2: #8a5aa8;
+    --qg-kind-3: #9a6a00;
+    --qg-kind-4: #146b6b;
+    --qg-kind-5: #a8406a;
+    --qg-kind-none: #6a6a6a;
 }
 
 .quest-graph__canvas {
@@ -496,4 +510,211 @@
     border-radius: 5px;
     border-color: var(--qg-warn-fill);
     color: var(--qg-text);
+}
+
+/* Web */
+
+.quest-graph__web-bar {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    top: 10px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 4px 6px;
+    background-color: var(--qg-node);
+    border-width: 1px;
+    border-color: var(--qg-node-line);
+    border-radius: 5px;
+}
+
+.quest-graph__web-search {
+    width: 200px;
+    margin: 0 8px;
+}
+
+.quest-graph__segment {
+    flex-direction: row;
+    margin-right: 8px;
+}
+
+.quest-graph__segment-button,
+.quest-graph__chip {
+    margin: 1px 2px;
+    padding: 1px 8px;
+    border-radius: 9px;
+    border-width: 1px;
+    border-color: var(--qg-node-line);
+    background-color: var(--qg-node);
+    color: var(--qg-text);
+}
+
+.quest-graph__segment-button--on,
+.quest-graph__chip--on {
+    background-color: var(--qg-select);
+    border-color: var(--qg-select);
+    color: #ffffff;
+}
+
+.quest-graph__chips {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.quest-graph__band {
+    position: absolute;
+    left: 0;
+    border-top-width: 1px;
+    border-color: var(--qg-grid-major);
+}
+
+.quest-graph__band-name {
+    position: absolute;
+    left: 12px;
+    top: 9px;
+    font-size: 10px;
+    -unity-font-style: bold;
+    letter-spacing: 1px;
+    color: var(--qg-dim);
+    border-left-width: 3px;
+    padding-left: 6px;
+}
+
+.quest-graph__quest {
+    position: absolute;
+    padding: 6px 8px 6px 10px;
+    background-color: var(--qg-node);
+    border-width: 1px;
+    border-left-width: 4px;
+    border-color: var(--qg-node-line);
+    border-radius: 5px;
+    color: var(--qg-text);
+}
+
+.quest-graph__quest--selected {
+    border-top-color: var(--qg-select);
+    border-right-color: var(--qg-select);
+    border-bottom-color: var(--qg-select);
+    border-top-width: 2px;
+    border-right-width: 2px;
+    border-bottom-width: 2px;
+}
+
+.quest-graph__quest--faded {
+    opacity: 0.25;
+}
+
+.quest-graph__quest--match {
+    background-color: var(--qg-node-head);
+    border-top-color: var(--qg-select);
+    border-right-color: var(--qg-select);
+    border-bottom-color: var(--qg-select);
+}
+
+.quest-graph__quest-head {
+    flex-direction: row;
+    align-items: center;
+}
+
+.quest-graph__quest-title {
+    flex-grow: 1;
+    flex-shrink: 1;
+    -unity-font-style: bold;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.quest-graph__quest-facts {
+    font-size: 11px;
+    color: var(--qg-dim);
+    margin-top: 2px;
+}
+
+.quest-graph__pin {
+    color: var(--qg-dim);
+    margin-left: 4px;
+}
+
+.quest-graph__handle {
+    position: absolute;
+    right: -7px;
+    top: 18px;
+    width: 12px;
+    height: 12px;
+    border-radius: 6px;
+    border-width: 2px;
+    border-color: var(--qg-wire);
+    background-color: var(--qg-node);
+    cursor: link;
+    opacity: 0.35;
+}
+
+.quest-graph__handle:hover {
+    opacity: 1;
+    border-color: var(--qg-select);
+}
+
+.quest-graph__kind-0 { border-left-color: var(--qg-kind-0); }
+.quest-graph__kind-1 { border-left-color: var(--qg-kind-1); }
+.quest-graph__kind-2 { border-left-color: var(--qg-kind-2); }
+.quest-graph__kind-3 { border-left-color: var(--qg-kind-3); }
+.quest-graph__kind-4 { border-left-color: var(--qg-kind-4); }
+.quest-graph__kind-5 { border-left-color: var(--qg-kind-5); }
+.quest-graph__kind-6 { border-left-color: var(--qg-kind-none); }
+
+.quest-graph__label--fails {
+    border-color: var(--qg-fails);
+}
+
+.quest-graph__flag {
+    position: absolute;
+    padding: 3px 8px;
+    font-size: 11px;
+    border-width: 1.5px;
+    border-radius: 3px;
+    border-color: var(--qg-flag);
+    background-color: var(--qg-node);
+    color: var(--qg-text);
+}
+
+.quest-graph__preview {
+    position: absolute;
+    width: 300px;
+    white-space: normal;
+    padding: 5px 7px;
+    border-width: 1px;
+    border-radius: 4px;
+    border-color: var(--qg-select);
+    background-color: var(--qg-node);
+    color: var(--qg-text);
+}
+
+.quest-graph__bulk {
+    position: absolute;
+    bottom: 14px;
+    align-self: center;
+    flex-direction: row;
+    align-items: center;
+    padding: 5px 8px;
+    border-width: 1px;
+    border-radius: 5px;
+    border-color: var(--qg-select);
+    background-color: var(--qg-node);
+    color: var(--qg-text);
+}
+
+.quest-graph__bulk > * {
+    margin-right: 10px;
+}
+
+.quest-graph__empty {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--qg-dim);
 }

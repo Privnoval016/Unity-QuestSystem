@@ -116,6 +116,12 @@ namespace QuestSystem
         /** <summary>What completing it gives.</summary> */
         public IReadOnlyList<IQuestReward> Rewards => rewards;
 
+        /** <summary>The asset that gives the quest, for editor tools; null when none.</summary> */
+        internal Object GiverAsset => giver;
+
+        /** <summary>The asset where the quest is given, for editor tools; null when none.</summary> */
+        internal Object PlaceAsset => place;
+
         /** <summary>Where the quest web draws it, when pinned; never read by the game.</summary> */
         public Vector2 WebPosition => webPosition;
 

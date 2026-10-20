@@ -9,14 +9,16 @@ using UnityEngine.UIElements;
 namespace QuestSystem.EditorTools
 {
     /**
-     * <summary>The quest graph window: one quest's steps to edit, with a quest list, back and forward, and a status bar.
-     * Opens from <i>Window &gt; Quests &gt; Quest Graph</i> and by double-clicking a quest. Its place survives domain reloads.</summary>
+     * <summary>The quest graph window: the web of every quest, or one quest's steps to edit, with back and forward
+     * between them. Opens from <i>Window &gt; Quests &gt; Quest Graph</i> and by double-clicking a quest. Where it was
+     * survives domain reloads.</summary>
      */
     public sealed class QuestGraphWindow : EditorWindow
     {
         #region Inspector Fields
 
-        [SerializeField] private string questGuid;
+        /** <summary>The quest open, by asset GUID; empty for the web.</summary> */
+        [SerializeField] private string questGuid = "";
         [SerializeField] private List<string> back = new List<string>();
         [SerializeField] private List<string> forward = new List<string>();
         [SerializeField] private Vector2 pan;
@@ -30,12 +32,20 @@ namespace QuestSystem.EditorTools
         private const long SkinCheckMilliseconds = 500;
 
         private QuestIndex _index;
+        private WebScreen _webScreen;
         private QuestScreen _questScreen;
         private QuestList _list;
         private ToolbarButton _back;
         private ToolbarButton _forward;
         private ToolbarBreadcrumbs _crumbs;
+        private VisualElement _questTools;
         private Label _status;
+
+        #endregion
+
+        #region Properties
+
+        private bool OnWeb => string.IsNullOrEmpty(questGuid) || QuestOf(questGuid) == null;
 
         #endregion
 
@@ -62,11 +72,13 @@ namespace QuestSystem.EditorTools
             toolbar.Add(_back);
             toolbar.Add(_forward);
             toolbar.Add(_crumbs);
-            toolbar.Add(new ToolbarSpacer());
-            toolbar.Add(new ToolbarButton(() => _questScreen.AddStep()) { text = "+ Step", tooltip = "Add a step" });
+            _questTools = new VisualElement { style = { flexDirection = FlexDirection.Row } };
+            _questTools.Add(new ToolbarSpacer());
+            _questTools.Add(new ToolbarButton(() => _questScreen.AddStep()) { text = "+ Step", tooltip = "Add a step" });
+            toolbar.Add(_questTools);
             toolbar.Add(new ToolbarSpacer { flex = true });
-            toolbar.Add(new ToolbarButton(() => _questScreen.Tidy()) { text = "Tidy", tooltip = "Lay out the steps again" });
-            toolbar.Add(new ToolbarButton(() => _questScreen.Frame(false)) { text = "Frame", tooltip = "Frame every step (A); F frames the selection" });
+            toolbar.Add(new ToolbarButton(Tidy) { text = "Tidy", tooltip = "Lay out again; pinned quests stay" });
+            toolbar.Add(new ToolbarButton(Frame) { text = "Frame", tooltip = "Frame everything (A); F frames the selection" });
             toolbar.Add(new ToolbarButton(Validate) { text = "Validate", tooltip = "Check every quest" });
             root.Add(toolbar);
 
@@ -75,14 +87,15 @@ namespace QuestSystem.EditorTools
             _list = new QuestList(_index);
             _list.OnPicked += quest => Navigate(GuidOf(quest));
             body.Add(_list);
+            _webScreen = new WebScreen(_index);
+            _webScreen.OnOpenQuest += quest => Navigate(GuidOf(quest));
+            _webScreen.OnRebuilt += UpdateStatus;
+            _webScreen.Canvas.OnViewChanged += RememberView;
+            body.Add(_webScreen);
             _questScreen = new QuestScreen(_index);
             _questScreen.OnOpenQuest += quest => Navigate(GuidOf(quest));
             _questScreen.OnRebuilt += UpdateStatus;
-            _questScreen.Canvas.OnViewChanged += view =>
-            {
-                pan = view.Pan;
-                zoom = view.Zoom;
-            };
+            _questScreen.Canvas.OnViewChanged += RememberView;
             body.Add(_questScreen);
             root.Add(body);
 
@@ -103,7 +116,7 @@ namespace QuestSystem.EditorTools
 
         #region Public API
 
-        /** <summary>Opens the window.</summary> */
+        /** <summary>Opens the window on the web.</summary> */
         [MenuItem("Window/Quests/Quest Graph")]
         public static void OpenWindow() => GetWindow<QuestGraphWindow>("Quest Graph");
 
@@ -127,20 +140,24 @@ namespace QuestSystem.EditorTools
             return true;
         }
 
-        private void HandleIndexChanged(QuestDefinition quest)
+        private void HandleIndexChanged(QuestDefinition quest) => _list?.Rebuild();
+
+        private void RememberView(CanvasView view)
         {
-            _list?.Rebuild();
-            if (_questScreen != null && _questScreen.Quest == null && QuestOf(questGuid) != null) ShowCurrent(null);
+            pan = view.Pan;
+            zoom = view.Zoom;
         }
 
         #endregion
 
         #region Helpers
 
+        /** <summary>Goes to a quest by GUID, or to the web with an empty one, remembering where it was.</summary> */
         private void Navigate(string guid)
         {
-            if (string.IsNullOrEmpty(guid) || guid == questGuid) return;
-            if (!string.IsNullOrEmpty(questGuid)) back.Add(questGuid);
+            guid ??= "";
+            if (guid == questGuid && _questScreen != null) return;
+            back.Add(questGuid);
             forward.Clear();
             questGuid = guid;
             ShowCurrent(null);
@@ -157,8 +174,8 @@ namespace QuestSystem.EditorTools
             {
                 var guid = from[from.Count - 1];
                 from.RemoveAt(from.Count - 1);
-                if (QuestOf(guid) == null) continue;
-                if (!string.IsNullOrEmpty(questGuid)) to.Add(questGuid);
+                if (!string.IsNullOrEmpty(guid) && QuestOf(guid) == null) continue;
+                to.Add(questGuid);
                 questGuid = guid;
                 ShowCurrent(null);
                 return;
@@ -169,11 +186,26 @@ namespace QuestSystem.EditorTools
         private void ShowCurrent(CanvasView? view)
         {
             if (_questScreen == null) return;
-            var quest = QuestOf(questGuid);
-            _questScreen.Show(quest, quest == null ? null : view);
-            _list.SetCurrent(quest);
-            titleContent = new GUIContent(quest == null ? "Quest Graph" : QuestStates.TitleOf(quest));
+            var web = OnWeb;
+            _webScreen.style.display = web ? DisplayStyle.Flex : DisplayStyle.None;
+            _questScreen.style.display = web ? DisplayStyle.None : DisplayStyle.Flex;
+            _list.style.display = web ? DisplayStyle.None : DisplayStyle.Flex;
+            _questTools.style.display = web ? DisplayStyle.None : DisplayStyle.Flex;
+            if (web)
+            {
+                _questScreen.Show(null);
+                _webScreen.Show(view);
+                titleContent = new GUIContent("Quest Graph");
+            }
+            else
+            {
+                var quest = QuestOf(questGuid);
+                _questScreen.Show(quest, view);
+                _list.SetCurrent(quest);
+                titleContent = new GUIContent(QuestStates.TitleOf(quest));
+            }
             UpdateToolbar();
+            UpdateStatus();
         }
 
         private void UpdateToolbar()
@@ -181,9 +213,9 @@ namespace QuestSystem.EditorTools
             _back.SetEnabled(back.Count > 0);
             _forward.SetEnabled(forward.Count > 0);
             while (_crumbs.childCount > 0) _crumbs.PopItem();
+            _crumbs.PushItem("Quests", () => Navigate(""));
+            if (OnWeb) return;
             var quest = QuestOf(questGuid);
-            _crumbs.PushItem("Quests");
-            if (quest == null) return;
             _crumbs.PushItem(quest.Kind == null ? "No kind" : quest.Kind.name);
             _crumbs.PushItem(QuestStates.TitleOf(quest));
         }
@@ -191,15 +223,31 @@ namespace QuestSystem.EditorTools
         private void UpdateStatus()
         {
             if (_status == null) return;
-            var (steps, objectives, errors, warnings) = _questScreen.Counts;
-            _status.text = _questScreen.Quest == null
-                ? $"{_index.Quests.Count} quests. Pick one on the left."
-                : string.Join("  ·  ", new[]
-                {
-                    $"{steps} steps", $"{objectives} objectives",
-                    errors > 0 ? $"{errors} error{(errors == 1 ? "" : "s")}" : null,
-                    warnings > 0 ? $"{warnings} warning{(warnings == 1 ? "" : "s")}" : null,
-                }.Where(part => part != null));
+            if (OnWeb)
+            {
+                var (shown, total, links, errors, warnings, unreadable) = _webScreen.Counts;
+                _status.text = Join(shown == total ? $"{total} quests" : $"{shown} of {total} quests", $"{links} links", Count(errors, "error"), Count(warnings, "warning"),
+                    unreadable > 0 ? $"{unreadable} condition{(unreadable == 1 ? "" : "s")} not shown" : null);
+                return;
+            }
+            var (steps, objectives, stepErrors, stepWarnings) = _questScreen.Counts;
+            _status.text = Join($"{steps} steps", $"{objectives} objectives", Count(stepErrors, "error"), Count(stepWarnings, "warning"));
+        }
+
+        private static string Count(int count, string noun) => count > 0 ? $"{count} {noun}{(count == 1 ? "" : "s")}" : null;
+
+        private static string Join(params string[] parts) => string.Join("  ·  ", parts.Where(part => part != null));
+
+        private void Tidy()
+        {
+            if (OnWeb) _webScreen.Tidy();
+            else _questScreen.Tidy();
+        }
+
+        private void Frame()
+        {
+            if (OnWeb) _webScreen.Frame(false);
+            else _questScreen.Frame(false);
         }
 
         /** <summary>Checks every quest again and shows the totals.</summary> */
@@ -208,16 +256,17 @@ namespace QuestSystem.EditorTools
             foreach (var quest in _index.Quests.ToList())
                 _index.Refresh(quest);
             _list.Rebuild();
-            _questScreen.Rebuild();
+            if (OnWeb) _webScreen.Rebuild();
+            else _questScreen.Rebuild();
             var errors = _index.Quests.Sum(quest => _index.SummaryOf(quest)?.Errors ?? 0);
             var warnings = _index.Quests.Sum(quest => _index.SummaryOf(quest)?.Warnings ?? 0);
-            _status.text = $"{_index.Quests.Count} quests checked  ·  {errors} error{(errors == 1 ? "" : "s")}  ·  {warnings} warning{(warnings == 1 ? "" : "s")}";
+            _status.text = Join($"{_index.Quests.Count} quests checked", Count(errors, "error") ?? "no errors", Count(warnings, "warning") ?? "no warnings");
         }
 
         private static QuestDefinition QuestOf(string guid) =>
             string.IsNullOrEmpty(guid) ? null : AssetDatabase.LoadAssetAtPath<QuestDefinition>(AssetDatabase.GUIDToAssetPath(guid));
 
-        private static string GuidOf(QuestDefinition quest) => quest == null ? null : AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(quest));
+        private static string GuidOf(QuestDefinition quest) => quest == null ? "" : AssetDatabase.AssetPathToGUID(AssetDatabase.GetAssetPath(quest));
 
         #endregion
     }

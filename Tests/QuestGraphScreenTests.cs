@@ -90,8 +90,9 @@ namespace QuestSystem.Tests
                 QuestGraphWindow.Open(quest);
                 for (var i = 0; i < 5; i++) yield return null;
                 var root = window.rootVisualElement;
-                Assert.That(root.Query(className: "quest-graph__node").ToList(), Has.Count.EqualTo(4));
-                Assert.That(root.Q<WireLayer>().Wires, Has.Count.EqualTo(4), "a>b, a>c, b>d, c>d");
+                var screen = root.Q<QuestScreen>();
+                Assert.That(screen.Query(className: "quest-graph__node").ToList(), Has.Count.EqualTo(4));
+                Assert.That(screen.Q<WireLayer>().Wires, Has.Count.EqualTo(4), "a>b, a>c, b>d, c>d");
                 Assert.That(root.Q<QuestList>().Query(className: "quest-graph__list-item--current").ToList(), Has.Count.EqualTo(1));
                 Assert.That(EditorUtility.IsDirty(quest), Is.False, "opening a quest never changes it");
             }

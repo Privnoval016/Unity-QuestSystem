@@ -30,6 +30,9 @@ namespace QuestSystem.EditorTools
 
         #region Properties
 
+        /** <summary>Behind everything else, positioned in content space: bands and other backdrops.</summary> */
+        public VisualElement Background { get; } = new VisualElement();
+
         /** <summary>Where nodes go, positioned in content space.</summary> */
         public VisualElement Nodes { get; } = new VisualElement();
 
@@ -62,11 +65,12 @@ namespace QuestSystem.EditorTools
             focusable = true;
             _content.AddToClassList("quest-graph__content");
             _content.pickingMode = PickingMode.Ignore;
-            foreach (var layer in new[] { (VisualElement)Wires, Nodes, Labels })
+            foreach (var layer in new[] { Background, Wires, Nodes, Labels })
             {
                 layer.AddToClassList("quest-graph__layer");
                 _content.Add(layer);
             }
+            Background.pickingMode = PickingMode.Ignore;
             Nodes.pickingMode = PickingMode.Ignore;
             Labels.pickingMode = PickingMode.Ignore;
             _marquee.AddToClassList("quest-graph__marquee");
@@ -189,7 +193,9 @@ namespace QuestSystem.EditorTools
 
         #region Helpers
 
-        private bool IsBackground(IEventHandler target) => target == this || target == _content || target == _grid || target == Nodes || target == Labels || target == Wires;
+        private bool IsBackground(IEventHandler target) =>
+            target == this || target == _content || target == _grid || target == Nodes || target == Labels || target == Wires || target == Background
+            || (target is VisualElement element && Background.Contains(element));
 
         private void ApplyView()
         {
