@@ -164,6 +164,13 @@ namespace QuestSystem
         /** <inheritdoc /> */
         public string StateName => QuestStates.NameOf(state);
 
+        /** <summary>Points the condition at another quest's step, for editor tools copying steps between quests.</summary> */
+        internal void Retarget(QuestDefinition targetQuest, string targetStepId)
+        {
+            quest = targetQuest;
+            stepId = targetStepId;
+        }
+
         /** <inheritdoc /> */
         public bool Evaluate(IFacts context) =>
             quest != null && context != null && context.TryGet<IQuestFacts>(out var quests) && quests.StateOf(quest, stepId) == state;

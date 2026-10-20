@@ -52,6 +52,9 @@ namespace QuestSystem
         /** <summary>The condition as a quest reference; null when it isn't one.</summary> */
         public static IQuestReference Of(ICondition<IFacts> condition) => condition as IQuestReference;
 
+        /** <summary>The condition as a step condition editor tools can point elsewhere; null when it isn't one.</summary> */
+        internal static StepStateCondition StepConditionOf(ICondition<IFacts> condition) => condition as StepStateCondition;
+
         /** <summary>The subject as a quest; null when it isn't one.</summary> */
         public static QuestDefinition QuestOf(IConditionSubject subject) => subject as QuestDefinition;
 

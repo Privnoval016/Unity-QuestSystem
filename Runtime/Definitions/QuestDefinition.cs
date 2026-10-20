@@ -151,6 +151,34 @@ namespace QuestSystem
             kind = settings.Kind;
         }
 
+        /** <summary>Puts a step at a place in the list, for editor tools.</summary> */
+        internal void InsertStep(int index, QuestStep step) => steps.Insert(Mathf.Clamp(index, 0, steps.Count), step);
+
+        /** <summary>Takes a step out, for editor tools.</summary> <returns>True when it was there.</returns> */
+        internal bool RemoveStep(QuestStep step) => steps.Remove(step);
+
+        /** <summary>Sets where the quest web draws the quest, for editor tools.</summary> */
+        internal void SetWebPlacement(Vector2 position, bool pinned)
+        {
+            webPosition = position;
+            webPinned = pinned;
+        }
+
+        /** <summary>Sets when the quest can be given, for editor tools.</summary> */
+        internal void SetAvailableWhen(ICondition<IFacts> condition) => availableWhen = condition;
+
+        /** <summary>Sets the quest's kind, for editor tools.</summary> */
+        internal void SetKind(QuestKind questKind) => kind = questKind;
+
+        /** <summary>Sets who gives the quest, for editor tools; an asset that isn't display-named clears it.</summary> */
+        internal void SetGiver(Object asset) => giver = DisplayNames.IsNamedOrEmpty(asset) ? asset : null;
+
+        /** <summary>Sets where the quest is given, for editor tools; an asset that isn't display-named clears it.</summary> */
+        internal void SetPlace(Object asset) => place = DisplayNames.IsNamedOrEmpty(asset) ? asset : null;
+
+        /** <summary>Sets the quest's title, for editor tools.</summary> */
+        internal void SetTitle(string questTitle) => title = questTitle;
+
         /** <summary>Finds a step by id; null when there is none.</summary> */
         public QuestStep FindStep(string stepId)
         {
@@ -194,10 +222,13 @@ namespace QuestSystem
 
         private static string NewId(HashSet<string> seen)
         {
-            var id = Guid.NewGuid().ToString("N").Substring(0, 12);
+            var id = CreateId();
             seen.Add(id);
             return id;
         }
+
+        /** <summary>A fresh step or objective id.</summary> */
+        internal static string CreateId() => Guid.NewGuid().ToString("N").Substring(0, 12);
 
         #endregion
     }

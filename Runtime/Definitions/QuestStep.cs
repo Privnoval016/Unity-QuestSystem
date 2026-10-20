@@ -142,6 +142,20 @@ namespace QuestSystem
         /** <summary>Gives the step a new id, for the editor when it is missing or repeated.</summary> */
         internal void AssignId(string newId) => id = newId;
 
+        /** <summary>Sets when the step starts, for editor tools.</summary> */
+        internal void SetStart(StepStart startRule, IEnumerable<string> linked, StepJoin rule)
+        {
+            start = startRule;
+            after = new List<string>(linked ?? Array.Empty<string>());
+            afterRule = rule;
+        }
+
+        /** <summary>Sets where the quest graph draws the step, for editor tools.</summary> */
+        internal void SetGraphPosition(Vector2 position) => graphPosition = position;
+
+        /** <summary>Sets what the step is about, for editor tools.</summary> */
+        internal void SetText(string stepText) => text = stepText;
+
         #endregion
     }
 
