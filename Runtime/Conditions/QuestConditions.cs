@@ -46,12 +46,25 @@ namespace QuestSystem
             return true;
         }
 
+        /** <summary>The flag and the comparison: "Sided With Guild", "Elders ≥ 3", "Sided With Guild = 0".</summary> */
+        public override string ToString()
+        {
+            var name = flag == null ? "no flag" : flag.name;
+            if (comparison == NumberComparison.AtLeast && value == 1) return name;
+            return comparison switch
+            {
+                NumberComparison.Equal => $"{name} = {value}",
+                NumberComparison.Below => $"{name} < {value}",
+                _ => $"{name} ≥ {value}",
+            };
+        }
+
         #endregion
     }
 
     /** <summary>True when a quest is in a state, or has been completed at least some number of times.</summary> */
     [Serializable]
-    public sealed class QuestStateCondition : ICondition<IFacts>, ISubjectReader
+    public sealed class QuestStateCondition : ICondition<IFacts>, ISubjectReader, IQuestReference
     {
         #region Inspector Fields
 
@@ -81,6 +94,15 @@ namespace QuestSystem
         }
 
         /** <inheritdoc /> */
+        public QuestDefinition Quest => quest;
+
+        /** <inheritdoc /> */
+        public string StepId => null;
+
+        /** <inheritdoc /> */
+        public string StateName => state == QuestState.Done && completions > 1 ? $"done {completions} times" : QuestStates.NameOf(state);
+
+        /** <inheritdoc /> */
         public bool Evaluate(IFacts context)
         {
             if (quest == null || context == null || !context.TryGet<IQuestFacts>(out var quests)) return false;
@@ -96,12 +118,15 @@ namespace QuestSystem
             return true;
         }
 
+        /** <summary>The quest and the state: "The Smith's Request done".</summary> */
+        public override string ToString() => $"{QuestStates.TitleOf(quest)} {StateName}";
+
         #endregion
     }
 
     /** <summary>True when one of a quest's steps is in a state.</summary> */
     [Serializable]
-    public sealed class StepStateCondition : ICondition<IFacts>, ISubjectReader
+    public sealed class StepStateCondition : ICondition<IFacts>, ISubjectReader, IQuestReference
     {
         #region Inspector Fields
 
@@ -130,11 +155,14 @@ namespace QuestSystem
             this.state = state;
         }
 
-        /** <summary>The quest the step belongs to.</summary> */
+        /** <inheritdoc /> */
         public QuestDefinition Quest => quest;
 
-        /** <summary>The step's id.</summary> */
+        /** <inheritdoc /> */
         public string StepId => stepId;
+
+        /** <inheritdoc /> */
+        public string StateName => QuestStates.NameOf(state);
 
         /** <inheritdoc /> */
         public bool Evaluate(IFacts context) =>
@@ -145,6 +173,14 @@ namespace QuestSystem
         {
             if (quest != null) subjects.Add(quest);
             return true;
+        }
+
+        /** <summary>The quest, the step and the state: "Guild Vote: Side with the rebels done".</summary> */
+        public override string ToString()
+        {
+            var step = quest == null ? null : quest.FindStep(stepId);
+            var stepName = step == null ? $"missing step {stepId}" : string.IsNullOrWhiteSpace(step.Text) ? step.Id : step.Text;
+            return $"{QuestStates.TitleOf(quest)}: {stepName} {StateName}";
         }
 
         #endregion

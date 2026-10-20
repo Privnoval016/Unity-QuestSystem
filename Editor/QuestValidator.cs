@@ -70,8 +70,6 @@ namespace QuestSystem.EditorTools
                     continue;
                 }
                 if (step.Objectives.Count == 0) issues.Add(Warning(quest, $"{label} has no objectives, so it completes the moment it starts"));
-                if (step.UnlockWhen is StepStateCondition waits && waits.Quest == quest && waits.StepId == step.Id)
-                    issues.Add(Error(quest, $"{label} unlocks when it is itself done, so it never starts"));
                 ValidateLinks(quest, step, label, issues);
                 for (var j = 0; j < step.Objectives.Count; j++)
                 {
@@ -116,10 +114,12 @@ namespace QuestSystem.EditorTools
                 if (quest.Steps[i] != null) labels[record.Steps[n++]] = $"step {i + 1}";
 
             var waiting = new HashSet<StepRecord>();
-            foreach (var cycle in Cycles(record.Steps))
+            foreach (var cycle in Cycles(record))
             {
                 waiting.UnionWith(cycle);
-                issues.Add(Error(quest, $"{string.Join(", ", cycle.Select(step => labels[step]))} wait on each other, so none starts"));
+                issues.Add(Error(quest, cycle.Count == 1
+                    ? $"{labels[cycle[0]]} waits on itself, so it never starts"
+                    : $"{string.Join(", ", cycle.Select(step => labels[step]))} wait on each other, so none starts"));
             }
 
             var reached = new HashSet<StepRecord>();
@@ -144,9 +144,25 @@ namespace QuestSystem.EditorTools
         /** <summary>True when a step's start doesn't wait on the steps it follows: an unlock condition replaces waiting for the step above.</summary> */
         private static bool StartsWithoutFollowed(StepRecord step) => step.Definition.Start == StepStart.AfterStepAbove && step.Definition.UnlockWhen != null;
 
-        /** <summary>Each set of steps that wait on each other, found by a depth-first walk over what each step follows.</summary> */
-        private static List<List<StepRecord>> Cycles(IReadOnlyList<StepRecord> steps)
+        /** <summary>The steps a step waits for: those it follows, unless its condition replaces that, and steps of this quest its condition requires.</summary> */
+        private static List<StepRecord> WaitsFor(QuestRecord record, StepRecord step)
         {
+            var waits = StartsWithoutFollowed(step) ? new List<StepRecord>() : new List<StepRecord>(step.Follows);
+            var found = new List<FoundReference>();
+            QuestReferences.Collect(step.Definition.UnlockWhen, found);
+            foreach (var reference in found)
+            {
+                if (!reference.Use.AsItself || !reference.Use.Required || reference.Reference.Quest != record.Definition || reference.Reference.StepId == null) continue;
+                var target = record.Find(reference.Reference.StepId);
+                if (target != null && !waits.Contains(target)) waits.Add(target);
+            }
+            return waits;
+        }
+
+        /** <summary>Each set of steps that wait on each other, found by a depth-first walk over what each step waits for.</summary> */
+        private static List<List<StepRecord>> Cycles(QuestRecord record)
+        {
+            var steps = record.Steps;
             var cycles = new List<List<StepRecord>>();
             var state = new Dictionary<StepRecord, int>();
             var path = new List<StepRecord>();
@@ -154,9 +170,8 @@ namespace QuestSystem.EditorTools
             {
                 state[step] = 1;
                 path.Add(step);
-                foreach (var before in step.Follows)
+                foreach (var before in WaitsFor(record, step))
                 {
-                    if (StartsWithoutFollowed(step)) break;
                     if (!state.TryGetValue(before, out var seen)) Visit(before);
                     else if (seen == 1) cycles.Add(path.GetRange(path.IndexOf(before), path.Count - path.IndexOf(before)));
                 }

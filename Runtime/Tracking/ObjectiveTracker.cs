@@ -29,6 +29,9 @@ namespace QuestSystem
          */
         public virtual bool TryCollectSubjects(ICollection<IConditionSubject> subjects) => Trackers.StateProgressOf(this) == null;
 
+        /** <summary>Adds the conditions it holds, so tools can find what they read; none by default.</summary> */
+        public virtual void CollectConditions(ICollection<ICondition<IFacts>> conditions) { }
+
         #endregion
     }
 
@@ -114,6 +117,15 @@ namespace QuestSystem
             return true;
         }
 
+        /** <inheritdoc /> */
+        public override void CollectConditions(ICollection<ICondition<IFacts>> conditions)
+        {
+            if (onlyWhen != null) conditions.Add(onlyWhen);
+        }
+
+        /** <summary>The signal, and when it counts: "Wolf Defeated if foe is Wolf".</summary> */
+        public override string ToString() => (signal == null ? "no signal" : signal.name) + (onlyWhen == null ? "" : " if " + ConditionTree.Summarize(onlyWhen));
+
         #endregion
     }
 
@@ -154,6 +166,9 @@ namespace QuestSystem
             return true;
         }
 
+        /** <summary>The flag: "flag Elders".</summary> */
+        public override string ToString() => "flag " + (flag == null ? "none" : flag.name);
+
         #endregion
     }
 
@@ -188,6 +203,15 @@ namespace QuestSystem
 
         /** <inheritdoc /> */
         public override bool TryCollectSubjects(ICollection<IConditionSubject> subjects) => ConditionSubjects.TryCollect(condition, subjects);
+
+        /** <inheritdoc /> */
+        public override void CollectConditions(ICollection<ICondition<IFacts>> conditions)
+        {
+            if (condition != null) conditions.Add(condition);
+        }
+
+        /** <summary>The condition: "while The Smith's Request done".</summary> */
+        public override string ToString() => "while " + ConditionTree.Summarize(condition);
 
         #endregion
     }

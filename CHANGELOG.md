@@ -7,6 +7,9 @@
 - With no step marked to end the quest, every step nothing follows ends it; a plain list still ends at its last step.
 - Validation of links: missing, self and repeated links, steps waiting on each other, steps that can never start.
 - Steps and quests keep where the quest graph draws them (editor data the game never reads).
+- `IQuestReference` and `QuestReferences`: tools find which quests and steps a condition reads. Trackers hand over
+  the conditions they hold. Conditions and trackers summarize themselves in one line.
+- The validator finds loops through step conditions as well as links; an Or offering another way isn't a loop.
 
 ## 2.0.0 (2026-10-19)
 

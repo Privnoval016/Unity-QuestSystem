@@ -76,6 +76,11 @@ Conditions are Extensions' `ICondition<IFacts>`: the same conditions the game us
 - **Quest conditions:** `FlagCondition` (at least, equal or below a number), `QuestStateCondition`,
   `StepStateCondition` (choose the step from a menu), combined with And / Or / Not. `IQuestFacts` also gives
   objective progress, for conditions a game writes.
+- **Tools read quest links from conditions.** `QuestStateCondition` and `StepStateCondition` are `IQuestReference`s
+  (the quest, the step, the state). A game's own condition on quests implements it to appear in the quest graph
+  and in "read by" lists. `QuestReferences.Collect` finds them anywhere in a condition tree, and counts parts that
+  can't say what they read. Conditions and trackers summarize themselves in one line (`ToString`), for the graph's
+  nodes.
 - **Checks are change-driven.** Every condition says what it reads, so a change checks only the quests that read
   it. A custom condition that doesn't say is checked after every change, so it still works.
 
