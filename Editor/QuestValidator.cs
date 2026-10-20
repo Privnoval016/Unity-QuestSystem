@@ -72,6 +72,7 @@ namespace QuestSystem.EditorTools
                 if (step.Objectives.Count == 0) issues.Add(Warning(quest, $"{label} has no objectives, so it completes the moment it starts"));
                 if (step.UnlockWhen is StepStateCondition waits && waits.Quest == quest && waits.StepId == step.Id)
                     issues.Add(Error(quest, $"{label} unlocks when it is itself done, so it never starts"));
+                ValidateLinks(quest, step, label, issues);
                 for (var j = 0; j < step.Objectives.Count; j++)
                 {
                     var objective = step.Objectives[j];
@@ -81,6 +82,7 @@ namespace QuestSystem.EditorTools
                     else if (objective.Tracker.MissingSetup != null) issues.Add(Error(quest, $"{objectiveLabel}: {objective.Tracker.MissingSetup}"));
                 }
             }
+            ValidateGraph(quest, issues);
             return issues;
         }
 
@@ -90,6 +92,81 @@ namespace QuestSystem.EditorTools
         #endregion
 
         #region Helpers
+
+        private static void ValidateLinks(QuestDefinition quest, QuestStep step, string label, List<QuestIssue> issues)
+        {
+            if (step.Start != StepStart.AfterLinkedSteps) return;
+            if (step.After.Count == 0) issues.Add(Error(quest, $"{label} starts after linked steps but has no links"));
+            var seen = new HashSet<string>();
+            foreach (var id in step.After)
+            {
+                if (id == step.Id) issues.Add(Error(quest, $"{label} is linked to itself"));
+                else if (quest.FindStep(id) == null) issues.Add(Error(quest, $"{label} is linked to a step that doesn't exist ({id})"));
+                if (!seen.Add(id ?? string.Empty)) issues.Add(Error(quest, $"{label} is linked to the same step twice"));
+            }
+            if (step.AfterRule == StepJoin.Any && step.After.Count == 1) issues.Add(Warning(quest, $"{label} starts after any of one linked step"));
+        }
+
+        /** <summary>Steps waiting on each other, steps nothing can start, and endings nobody marked.</summary> */
+        private static void ValidateGraph(QuestDefinition quest, List<QuestIssue> issues)
+        {
+            var record = new QuestRecord(quest);
+            var labels = new Dictionary<StepRecord, string>();
+            for (int i = 0, n = 0; i < quest.Steps.Count; i++)
+                if (quest.Steps[i] != null) labels[record.Steps[n++]] = $"step {i + 1}";
+
+            var waiting = new HashSet<StepRecord>();
+            foreach (var cycle in Cycles(record.Steps))
+            {
+                waiting.UnionWith(cycle);
+                issues.Add(Error(quest, $"{string.Join(", ", cycle.Select(step => labels[step]))} wait on each other, so none starts"));
+            }
+
+            var reached = new HashSet<StepRecord>();
+            var open = new Stack<StepRecord>(record.Steps.Where(step => step.Follows.Count == 0 || StartsWithoutFollowed(step)));
+            while (open.Count > 0)
+            {
+                var step = open.Pop();
+                if (!reached.Add(step)) continue;
+                foreach (var dependant in step.Dependants)
+                    if (dependant.Definition.AfterRule == StepJoin.Any || dependant.Follows.All(reached.Contains) || StartsWithoutFollowed(dependant)) open.Push(dependant);
+            }
+            foreach (var step in record.Steps.Where(step => !reached.Contains(step) && !waiting.Contains(step)))
+                issues.Add(Warning(quest, $"{labels[step]} can never start"));
+
+            if (!quest.Steps.Any(step => step != null && step.EndsQuest))
+            {
+                var ends = record.Steps.Where(step => step.Dependants.Count == 0).ToList();
+                if (ends.Count > 1) issues.Add(Warning(quest, $"{string.Join(", ", ends.Select(step => labels[step]))} each end the quest, since nothing follows them; mark the ending steps to be sure"));
+            }
+        }
+
+        /** <summary>True when a step's start doesn't wait on the steps it follows: an unlock condition replaces waiting for the step above.</summary> */
+        private static bool StartsWithoutFollowed(StepRecord step) => step.Definition.Start == StepStart.AfterStepAbove && step.Definition.UnlockWhen != null;
+
+        /** <summary>Each set of steps that wait on each other, found by a depth-first walk over what each step follows.</summary> */
+        private static List<List<StepRecord>> Cycles(IReadOnlyList<StepRecord> steps)
+        {
+            var cycles = new List<List<StepRecord>>();
+            var state = new Dictionary<StepRecord, int>();
+            var path = new List<StepRecord>();
+            void Visit(StepRecord step)
+            {
+                state[step] = 1;
+                path.Add(step);
+                foreach (var before in step.Follows)
+                {
+                    if (StartsWithoutFollowed(step)) break;
+                    if (!state.TryGetValue(before, out var seen)) Visit(before);
+                    else if (seen == 1) cycles.Add(path.GetRange(path.IndexOf(before), path.Count - path.IndexOf(before)));
+                }
+                path.RemoveAt(path.Count - 1);
+                state[step] = 2;
+            }
+            foreach (var step in steps)
+                if (!state.ContainsKey(step)) Visit(step);
+            return cycles;
+        }
 
         private static QuestIssue Error(QuestDefinition quest, string problem) => new QuestIssue(QuestIssueLevel.Error, quest, problem);
 

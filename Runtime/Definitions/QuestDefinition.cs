@@ -55,11 +55,17 @@ namespace QuestSystem
         [Tooltip("When the quest fails. Empty: it can't fail, except through a step.")]
         [SerializeReference, SubclassPicker] private ICondition<IFacts> failWhen;
 
-        [Tooltip("The quest's steps, in order.")]
+        [Tooltip("The quest's steps. Order matters for steps that start after the step above.")]
         [SerializeField] private List<QuestStep> steps = new List<QuestStep>();
 
         [Tooltip("What completing the quest gives.")]
         [SerializeReference, SubclassPicker] private List<IQuestReward> rewards = new List<IQuestReward>();
+
+        [HideInInspector]
+        [SerializeField] private Vector2 webPosition;
+
+        [HideInInspector]
+        [SerializeField] private bool webPinned;
 
         #endregion
 
@@ -109,6 +115,12 @@ namespace QuestSystem
 
         /** <summary>What completing it gives.</summary> */
         public IReadOnlyList<IQuestReward> Rewards => rewards;
+
+        /** <summary>Where the quest web draws it, when pinned; never read by the game.</summary> */
+        public Vector2 WebPosition => webPosition;
+
+        /** <summary>True when the quest web keeps it where it was dragged; never read by the game.</summary> */
+        public bool WebPinned => webPinned;
 
         #endregion
 

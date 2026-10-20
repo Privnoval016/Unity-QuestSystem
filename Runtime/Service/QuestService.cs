@@ -440,7 +440,7 @@ namespace QuestSystem
             foreach (var step in record.Steps)
             {
                 if (record.State != QuestState.Active) return;
-                if (step.State == StepState.Locked && ShouldUnlock(record, step, subject)) Unlock(record, step);
+                if (step.State == StepState.Locked && ShouldUnlock(step, subject)) Unlock(record, step);
                 if (step.State != StepState.Active) continue;
                 foreach (var objective in step.Objectives)
                     if (objective.State != null && Reads(objective.Definition.Tracker, subject)) SetProgress(record, objective, objective.State.ProgressNow(_facts));
@@ -466,13 +466,12 @@ namespace QuestSystem
             }
         }
 
-        private bool ShouldUnlock(QuestRecord record, StepRecord step, IConditionSubject subject)
+        /** <summary>True when a locked step should start: the steps it follows allow it, and its unlock condition holds. A change only reaches steps whose condition reads it.</summary> */
+        private bool ShouldUnlock(StepRecord step, IConditionSubject subject)
         {
             var unlockWhen = step.Definition.UnlockWhen;
-            if (unlockWhen != null) return Reads(unlockWhen, subject) && unlockWhen.Evaluate(_facts);
-            if (subject != null) return false;
-            var before = record.Before(step);
-            return before == null || before.State == StepState.Done;
+            if (subject != null && (unlockWhen == null || !Reads(unlockWhen, subject))) return false;
+            return step.IsStartMet && (unlockWhen == null || unlockWhen.Evaluate(_facts));
         }
 
         private void Unlock(QuestRecord record, StepRecord step)
@@ -506,8 +505,11 @@ namespace QuestSystem
                 Complete(record);
                 return;
             }
-            var next = record.After(step);
-            if (next != null && next.State == StepState.Locked && next.Definition.UnlockWhen == null) Unlock(record, next);
+            foreach (var dependant in step.Dependants)
+            {
+                if (record.State != QuestState.Active) return;
+                if (dependant.State == StepState.Locked && ShouldUnlock(dependant, null)) Unlock(record, dependant);
+            }
         }
 
         private void Complete(QuestRecord record)

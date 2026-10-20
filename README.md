@@ -27,7 +27,7 @@ None is auto-referenced.
 | Asset or type | What it is |
 |---|---|
 | **`QuestDefinition`** (*Create > Quests > Quest*) | A quest: title, summary, kind, order within its kind, giver and place, suggested level, steps, rewards, and when it can be given or fails. Repeatable or not; hidden until given or not |
-| **`QuestStep`** (inside the quest) | A stage. It starts when the step before it is done, or when its own condition holds (for branches). It completes when all its required objectives are done, or any one. It can fail, which fails the quest. It can end the quest |
+| **`QuestStep`** (inside the quest) | A stage. It starts after the step above, after its linked steps, or with the quest (below). It completes when all its required objectives are done, or any one. It can fail, which fails the quest. It can end the quest |
 | **`QuestObjective`** (inside a step) | One thing a step asks for, counted by a tracker up to a target. Optional (bonus) objectives never hold a step back |
 | **`StoryFlag`** (*Create > Quests > Story Flag*) | A whole number about the story, 0 when unset. Set by quests and the game, read by conditions and trackers |
 | **`QuestSignal`** (*Create > Quests > Quest Signal*) | Something that happens: a wolf defeated, a place reached. Raised by game code or a `QuestTrigger` |
@@ -38,6 +38,20 @@ Quests, kinds and flags get asset ids from Extensions. Saves point at ids, so re
 
 **Givers and places** are any assets the game makes that implement `IDisplayNamed` (a character, a town). The
 quest only asks for their display name.
+
+**When a step starts** (its start rule):
+
+- **After the step above** (the default): when the step above it is done; the first step starts with the quest. A
+  step with an unlock condition starts when that holds instead, for branches.
+- **After linked steps:** when all of its linked steps are done, or any one of them. The quest graph draws links as
+  wires.
+- **With the quest:** as soon as the quest is given, for steps that run side by side.
+
+With linked steps or with the quest, an unlock condition is a further check: both must hold.
+
+**Which step ends the quest:** a step marked "ends quest". With none marked, every step that no other step comes
+after ends it. A step after the step above follows it, even with an unlock condition, so a plain list still ends at
+its last step. The validator warns when several unmarked steps would end a quest.
 
 **Trackers** (what counts towards an objective):
 
@@ -157,10 +171,12 @@ every set flag, and the active quest, all by id.
 - a quest with no asset id (it couldn't be saved);
 - an empty step or objective slot;
 - an objective with no tracker, or a tracker with nothing set;
-- a step that waits on itself;
+- a step that waits on itself, or steps whose links wait on each other;
+- a link to a step that doesn't exist, to itself, or twice; linked steps with no links;
 - a quest with no steps.
 
-Warnings: a missing kind or title, a step with no objectives.
+Warnings: a missing kind or title, a step with no objectives, a step that can never start, "any" of a single link,
+several unmarked steps that would each end the quest.
 
 ## Upgrading from v1
 

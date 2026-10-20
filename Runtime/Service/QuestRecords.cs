@@ -29,7 +29,7 @@ namespace QuestSystem
         /** <summary>Every objective of every step.</summary> */
         public IReadOnlyList<ObjectiveRecord> Objectives { get; }
 
-        /** <summary>True when a step is marked to end the quest; otherwise the last step does.</summary> */
+        /** <summary>True when a step is marked to end the quest; otherwise every step nothing follows does.</summary> */
         private bool HasMarkedEnd { get; }
 
         #endregion
@@ -52,6 +52,7 @@ namespace QuestSystem
             }
             Steps = steps;
             Objectives = objectives;
+            LinkSteps(steps);
         }
 
         /** <summary>Makes the quest active with every step locked again; completions are kept.</summary> */
@@ -90,8 +91,8 @@ namespace QuestSystem
             return null;
         }
 
-        /** <summary>True when completing this step completes the quest: a step marked to, or else the last step.</summary> */
-        public bool EndsWith(StepRecord step) => HasMarkedEnd ? step.Definition.EndsQuest : Steps.Count > 0 && Steps[Steps.Count - 1] == step;
+        /** <summary>True when completing this step completes the quest: a step marked to, or else a step nothing follows.</summary> */
+        public bool EndsWith(StepRecord step) => HasMarkedEnd ? step.Definition.EndsQuest : step.Dependants.Count == 0;
 
         /** <summary>True when a step that ends the quest is done.</summary> */
         public bool HasEnded()
@@ -101,21 +102,6 @@ namespace QuestSystem
             return false;
         }
 
-        /** <summary>The step before this one; null for the first.</summary> */
-        public StepRecord Before(StepRecord step)
-        {
-            for (var i = 1; i < Steps.Count; i++)
-                if (Steps[i] == step) return Steps[i - 1];
-            return null;
-        }
-
-        /** <summary>The step after this one; null for the last.</summary> */
-        public StepRecord After(StepRecord step)
-        {
-            for (var i = 0; i < Steps.Count - 1; i++)
-                if (Steps[i] == step) return Steps[i + 1];
-            return null;
-        }
 
         /** <summary>The quest as saved data.</summary> */
         public QuestEntry ToEntry()
@@ -151,11 +137,44 @@ namespace QuestSystem
         }
 
         #endregion
+
+        #region Helpers
+
+        /** <summary>Links each step to the steps it follows: the step above, its linked steps, or none. Unknown ids and self-links are skipped.</summary> */
+        private void LinkSteps(List<StepRecord> steps)
+        {
+            for (var i = 0; i < steps.Count; i++)
+            {
+                var step = steps[i];
+                switch (step.Definition.Start)
+                {
+                    case StepStart.AfterStepAbove:
+                        if (i > 0) step.Follow(steps[i - 1]);
+                        break;
+                    case StepStart.AfterLinkedSteps:
+                        foreach (var id in step.Definition.After)
+                        {
+                            var before = Find(id);
+                            if (before != null && before != step) step.Follow(before);
+                        }
+                        break;
+                }
+            }
+        }
+
+        #endregion
     }
 
     /** <summary>A step's runtime state.</summary> */
     internal sealed class StepRecord
     {
+        #region Private Fields
+
+        private readonly List<StepRecord> _follows = new List<StepRecord>();
+        private readonly List<StepRecord> _dependants = new List<StepRecord>();
+
+        #endregion
+
         #region Properties
 
         /** <summary>The step.</summary> */
@@ -169,6 +188,23 @@ namespace QuestSystem
 
         /** <summary>Its objectives.</summary> */
         public IReadOnlyList<ObjectiveRecord> Objectives { get; }
+
+        /** <summary>The steps it comes after.</summary> */
+        public IReadOnlyList<StepRecord> Follows => _follows;
+
+        /** <summary>The steps that come after it.</summary> */
+        public IReadOnlyList<StepRecord> Dependants => _dependants;
+
+        /**
+         * <summary>True when the steps it follows let it start: the step above is done (or its unlock condition
+         * replaces waiting for it), its links are done by their rule, or it starts with the quest.</summary>
+         */
+        public bool IsStartMet => Definition.Start switch
+        {
+            StepStart.AfterStepAbove => Definition.UnlockWhen != null || AllFollowedDone(),
+            StepStart.AfterLinkedSteps => Definition.AfterRule == StepJoin.Any && _follows.Count > 0 ? AnyFollowedDone() : AllFollowedDone(),
+            _ => true,
+        };
 
         /** <summary>True when its objectives complete it, by its completion rule.</summary> */
         public bool IsComplete
@@ -209,6 +245,32 @@ namespace QuestSystem
             State = StepState.Locked;
             foreach (var objective in Objectives)
                 objective.Progress = 0;
+        }
+
+        /** <summary>Makes this step come after another.</summary> */
+        public void Follow(StepRecord before)
+        {
+            if (_follows.Contains(before)) return;
+            _follows.Add(before);
+            before._dependants.Add(this);
+        }
+
+        #endregion
+
+        #region Helpers
+
+        private bool AllFollowedDone()
+        {
+            foreach (var step in _follows)
+                if (step.State != StepState.Done) return false;
+            return true;
+        }
+
+        private bool AnyFollowedDone()
+        {
+            foreach (var step in _follows)
+                if (step.State == StepState.Done) return true;
+            return false;
         }
 
         #endregion

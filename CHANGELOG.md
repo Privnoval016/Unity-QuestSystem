@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Step links: a step starts after the step above (as before), after its linked steps (all or any), or with the
+  quest. An unlock condition is a further check on links. Saves are unchanged.
+- With no step marked to end the quest, every step nothing follows ends it; a plain list still ends at its last step.
+- Validation of links: missing, self and repeated links, steps waiting on each other, steps that can never start.
+- Steps and quests keep where the quest graph draws them (editor data the game never reads).
+
 ## 2.0.0 (2026-10-19)
 
 A rewrite. Version 1 is kept on the `v1` branch and the `v1.0.0` tag.
