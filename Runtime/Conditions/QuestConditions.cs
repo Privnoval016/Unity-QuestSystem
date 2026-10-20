@@ -126,7 +126,7 @@ namespace QuestSystem
 
     /** <summary>True when one of a quest's steps is in a state.</summary> */
     [Serializable]
-    public sealed class StepStateCondition : ICondition<IFacts>, ISubjectReader, IQuestReference
+    public sealed class StepStateCondition : ICondition<IFacts>, ISubjectReader, IQuestReference, IStepRetargetable
     {
         #region Inspector Fields
 
@@ -164,8 +164,8 @@ namespace QuestSystem
         /** <inheritdoc /> */
         public string StateName => QuestStates.NameOf(state);
 
-        /** <summary>Points the condition at another quest's step, for editor tools copying steps between quests.</summary> */
-        internal void Retarget(QuestDefinition targetQuest, string targetStepId)
+        /** <inheritdoc /> */
+        public void Retarget(QuestDefinition targetQuest, string targetStepId)
         {
             quest = targetQuest;
             stepId = targetStepId;

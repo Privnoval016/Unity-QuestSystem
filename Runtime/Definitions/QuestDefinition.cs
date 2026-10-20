@@ -61,11 +61,17 @@ namespace QuestSystem
         [Tooltip("What completing the quest gives.")]
         [SerializeReference, SubclassPicker] private List<IQuestReward> rewards = new List<IQuestReward>();
 
+        [Tooltip("Where the quest web draws the quest when pinned. The game never reads it.")]
         [HideInInspector]
         [SerializeField] private Vector2 webPosition;
 
+        [Tooltip("True when the quest web keeps the quest where it was dragged. The game never reads it.")]
         [HideInInspector]
         [SerializeField] private bool webPinned;
+
+        [Tooltip("True once the quest graph has saved where every step goes. The game never reads it.")]
+        [HideInInspector]
+        [SerializeField] private bool graphArranged;
 
         #endregion
 
@@ -128,6 +134,9 @@ namespace QuestSystem
         /** <summary>True when the quest web keeps it where it was dragged; never read by the game.</summary> */
         public bool WebPinned => webPinned;
 
+        /** <summary>True once the quest graph has saved where every step goes; never read by the game.</summary> */
+        public bool GraphArranged => graphArranged;
+
         #endregion
 
         #region MonoBehaviour Callbacks
@@ -169,6 +178,9 @@ namespace QuestSystem
             webPosition = position;
             webPinned = pinned;
         }
+
+        /** <summary>Marks every step as placed by the quest graph, for editor tools.</summary> */
+        internal void SetGraphArranged(bool arranged) => graphArranged = arranged;
 
         /** <summary>Sets when the quest can be given, for editor tools.</summary> */
         internal void SetAvailableWhen(ICondition<IFacts> condition) => availableWhen = condition;

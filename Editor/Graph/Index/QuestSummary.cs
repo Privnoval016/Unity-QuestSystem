@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Extensions.Logic;
 
 namespace QuestSystem.EditorTools
@@ -36,74 +37,90 @@ namespace QuestSystem.EditorTools
         /** <summary>Reads a quest.</summary> */
         public static QuestSummary Of(QuestDefinition quest) => new QuestSummary(quest);
 
+        /** <summary>Reads a quest: every condition and tracker, then its problems.</summary> */
+        private QuestSummary(QuestDefinition quest)
+        {
+            Quest = quest;
+            var scan = new Scan(quest);
+            scan.Condition(quest.AvailableWhen, LinkSlot.Available, null);
+            scan.Condition(quest.FailWhen, LinkSlot.Fails, null);
+            foreach (var step in quest.Steps)
+            {
+                if (step == null) continue;
+                scan.Condition(step.UnlockWhen, LinkSlot.StepUnlock, step.Id);
+                scan.Condition(step.FailWhen, LinkSlot.StepFails, step.Id);
+                foreach (var objective in step.Objectives)
+                    if (objective?.Tracker != null) scan.Tracker(objective.Tracker, step.Id);
+            }
+            Reads = scan.Links;
+            Flags = scan.Flags.ToList();
+            Unreadable = scan.Unreadable;
+            var issues = QuestValidator.Validate(quest);
+            Issues = issues;
+            Errors = issues.Count(issue => issue.Level == QuestIssueLevel.Error);
+            Warnings = issues.Count - Errors;
+        }
+
         #endregion
 
         #region Helpers
 
-        private QuestSummary(QuestDefinition quest)
+        /** <summary>Collects a quest's links, flags and unreadable conditions, one condition or tracker at a time.</summary> */
+        private sealed class Scan
         {
-            Quest = quest;
-            var links = new List<QuestLink>();
-            var flags = new List<StoryFlag>();
-            var unreadable = 0;
-            var found = new List<FoundReference>();
-            var subjects = new HashSet<IConditionSubject>();
-            var held = new List<ICondition<IFacts>>();
+            private readonly QuestDefinition _quest;
+            private readonly List<FoundReference> _found = new List<FoundReference>();
+            private readonly HashSet<IConditionSubject> _subjects = new HashSet<IConditionSubject>();
+            private readonly List<ICondition<IFacts>> _held = new List<ICondition<IFacts>>();
 
-            void Scan(ICondition<IFacts> condition, LinkSlot slot, string stepId)
+            public List<QuestLink> Links { get; } = new List<QuestLink>();
+            public HashSet<StoryFlag> Flags { get; } = new HashSet<StoryFlag>();
+            public int Unreadable { get; private set; }
+
+            public Scan(QuestDefinition quest) => _quest = quest;
+
+            /** <summary>Reads one condition: the quests it names with how it uses them, quests it reads without saying how, and its flags.</summary> */
+            public void Condition(ICondition<IFacts> condition, LinkSlot slot, string stepId)
             {
                 if (condition == null) return;
-                found.Clear();
-                unreadable += QuestReferences.Collect(condition, found);
+                _found.Clear();
+                Unreadable += QuestReferences.Collect(condition, _found);
                 var named = new HashSet<QuestDefinition>();
-                foreach (var reference in found)
+                foreach (var reference in _found)
                 {
-                    links.Add(new QuestLink(quest, stepId, slot, reference.Reference.Quest, reference.Reference.StepId, reference.Reference.StateName, reference.Use));
+                    Links.Add(new QuestLink(_quest, stepId, slot, reference.Reference.Quest, reference.Reference.StepId, reference.Reference.StateName, reference.Use));
                     named.Add(reference.Reference.Quest);
                 }
-                subjects.Clear();
-                ConditionSubjects.TryCollect(condition, subjects);
-                foreach (var subject in subjects)
+                _subjects.Clear();
+                ConditionSubjects.TryCollect(condition, _subjects);
+                AddFlags();
+                foreach (var subject in _subjects)
+                {
+                    var read = QuestReferences.QuestOf(subject);
+                    if (read != null && !named.Contains(read)) Links.Add(new QuestLink(_quest, stepId, slot, read, null, QuestLink.UnknownState, new LeafUse(true, false)));
+                }
+            }
+
+            /** <summary>Reads one tracker: the conditions it holds, and the flags it reads.</summary> */
+            public void Tracker(ObjectiveTracker tracker, string stepId)
+            {
+                _held.Clear();
+                Trackers.ConditionHolderOf(tracker)?.CollectConditions(_held);
+                foreach (var condition in _held.ToList())
+                    Condition(condition, LinkSlot.Objective, stepId);
+                _subjects.Clear();
+                tracker.TryCollectSubjects(_subjects);
+                AddFlags();
+            }
+
+            private void AddFlags()
+            {
+                foreach (var subject in _subjects)
                 {
                     var flag = QuestReferences.FlagOf(subject);
-                    if (flag != null && !flags.Contains(flag)) flags.Add(flag);
-                    var read = QuestReferences.QuestOf(subject);
-                    if (read != null && !named.Contains(read)) links.Add(new QuestLink(quest, stepId, slot, read, null, "read", new LeafUse(true, false)));
+                    if (flag != null) Flags.Add(flag);
                 }
             }
-
-            Scan(quest.AvailableWhen, LinkSlot.Available, null);
-            Scan(quest.FailWhen, LinkSlot.Fails, null);
-            foreach (var step in quest.Steps)
-            {
-                if (step == null) continue;
-                Scan(step.UnlockWhen, LinkSlot.StepUnlock, step.Id);
-                Scan(step.FailWhen, LinkSlot.StepFails, step.Id);
-                foreach (var objective in step.Objectives)
-                {
-                    if (objective?.Tracker == null) continue;
-                    held.Clear();
-                    objective.Tracker.CollectConditions(held);
-                    foreach (var condition in held)
-                        Scan(condition, LinkSlot.Objective, step.Id);
-                    subjects.Clear();
-                    objective.Tracker.TryCollectSubjects(subjects);
-                    foreach (var subject in subjects)
-                    {
-                        var flag = QuestReferences.FlagOf(subject);
-                        if (flag != null && !flags.Contains(flag)) flags.Add(flag);
-                    }
-                }
-            }
-
-            Reads = links;
-            Flags = flags;
-            Unreadable = unreadable;
-            var issues = QuestValidator.Validate(quest);
-            Issues = issues;
-            foreach (var issue in issues)
-                if (issue.Level == QuestIssueLevel.Error) Errors++;
-                else Warnings++;
         }
 
         #endregion

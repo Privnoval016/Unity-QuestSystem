@@ -15,22 +15,21 @@
     --qg-fails: #ff8a80;
     --qg-flag: #e4b25a;
     --qg-ghost: #8a8a8a;
-    --qg-select: #3d7bc4;
+    --qg-select: #356db0;
+    --qg-marquee: rgba(53, 109, 176, 0.18);
+    --qg-band-line: rgba(255, 255, 255, 0.10);
     --qg-end: #7fb0f0;
     --qg-error: #ff8a80;
     --qg-error-fill: #b8332b;
     --qg-warn: #f0c45a;
     --qg-warn-fill: #e2b33c;
-    --qg-main: #5b8fd9;
-    --qg-errand: #5fb07c;
-    --qg-side: #b07fd0;
-    --qg-kind-0: #5b8fd9;
-    --qg-kind-1: #5fb07c;
-    --qg-kind-2: #b07fd0;
-    --qg-kind-3: #e4b25a;
-    --qg-kind-4: #5fd0c8;
-    --qg-kind-5: #e07a9a;
-    --qg-kind-none: #8a8a8a;
+    --qg-kind-indigo: #8088e6;
+    --qg-kind-green: #63ad6f;
+    --qg-kind-purple: #b583d6;
+    --qg-kind-orange: #e0874a;
+    --qg-kind-olive: #a8aa5e;
+    --qg-kind-grey: #9a9a9a;
+    --qg-kind-none: #555555;
 }
 
 .quest-graph--light {
@@ -48,21 +47,20 @@
     --qg-flag: #8a5a00;
     --qg-ghost: #6a6a6a;
     --qg-select: #2f67a8;
+    --qg-marquee: rgba(47, 103, 168, 0.15);
+    --qg-band-line: rgba(0, 0, 0, 0.14);
     --qg-end: #2f67a8;
     --qg-error: #a8221d;
     --qg-error-fill: #c4302b;
     --qg-warn: #7a5200;
     --qg-warn-fill: #e0b23a;
-    --qg-main: #3f6fb5;
-    --qg-errand: #3f8a5a;
-    --qg-side: #8a5aa8;
-    --qg-kind-0: #3f6fb5;
-    --qg-kind-1: #3f8a5a;
-    --qg-kind-2: #8a5aa8;
-    --qg-kind-3: #9a6a00;
-    --qg-kind-4: #146b6b;
-    --qg-kind-5: #a8406a;
-    --qg-kind-none: #6a6a6a;
+    --qg-kind-indigo: #4a52b8;
+    --qg-kind-green: #3f8a4f;
+    --qg-kind-purple: #8a5aa8;
+    --qg-kind-orange: #b0561a;
+    --qg-kind-olive: #6e7020;
+    --qg-kind-grey: #6a6a6a;
+    --qg-kind-none: #a8a8a8;
 }
 
 .quest-graph__canvas {
@@ -107,7 +105,7 @@
     position: absolute;
     border-width: 1px;
     border-color: var(--qg-select);
-    background-color: rgba(61, 123, 196, 0.15);
+    background-color: var(--qg-marquee);
 }
 
 .quest-graph__label {
@@ -128,6 +126,7 @@
 
 .quest-graph {
     flex-grow: 1;
+    --qg-kind: var(--qg-kind-none);
 }
 
 .quest-graph__body {
@@ -169,6 +168,8 @@
 }
 
 .quest-graph__group {
+    flex-direction: row;
+    align-items: center;
     font-size: 10px;
     -unity-font-style: bold;
     color: var(--qg-dim);
@@ -295,7 +296,7 @@
     height: 7px;
     border-radius: 2px;
     margin-right: 5px;
-    background-color: var(--qg-main);
+    background-color: var(--qg-kind);
 }
 
 /* Step nodes */
@@ -307,11 +308,6 @@
     border-color: var(--qg-node-line);
     border-radius: 5px;
     color: var(--qg-text);
-}
-
-.quest-graph__node--selected {
-    border-color: var(--qg-select);
-    border-width: 2px;
 }
 
 .quest-graph__node--error {
@@ -385,8 +381,8 @@
 
 .quest-graph__pill--end-implicit {
     border-color: var(--qg-ghost);
-    color: var(--qg-end);
-    -unity-font-style: bold-and-italic;
+    color: var(--qg-ghost);
+    -unity-font-style: italic;
 }
 
 .quest-graph__node-body {
@@ -405,10 +401,12 @@
     border-width: 1.5px;
     border-radius: 4px;
     border-color: var(--qg-dim);
+    background-color: var(--qg-dim);
 }
 
 .quest-graph__objective--optional .quest-graph__objective-dot {
     border-color: var(--qg-ghost);
+    background-color: rgba(0, 0, 0, 0);
 }
 
 .quest-graph__objective-text {
@@ -446,6 +444,10 @@
     -unity-font-style: bold;
     margin-right: 6px;
     flex-shrink: 0;
+}
+
+.quest-graph__rule-label--fails {
+    color: var(--qg-fails);
 }
 
 .quest-graph__rule-text {
@@ -492,6 +494,17 @@
     border-color: var(--qg-ghost);
     background-color: var(--qg-node);
     color: var(--qg-text);
+    overflow: hidden;
+}
+
+.quest-graph__stub-title {
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.quest-graph__stub .quest-graph__ref-note {
+    flex-shrink: 0;
 }
 
 .quest-graph__stub:hover {
@@ -515,58 +528,32 @@
 /* Web */
 
 .quest-graph__web-bar {
-    position: absolute;
-    left: 10px;
-    right: 10px;
-    top: 10px;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    padding: 4px 6px;
-    background-color: var(--qg-node);
-    border-width: 1px;
-    border-color: var(--qg-node-line);
-    border-radius: 5px;
+    flex-shrink: 0;
 }
 
 .quest-graph__web-search {
-    width: 200px;
-    margin: 0 8px;
-}
-
-.quest-graph__segment {
-    flex-direction: row;
-    margin-right: 8px;
-}
-
-.quest-graph__segment-button,
-.quest-graph__chip {
-    margin: 1px 2px;
-    padding: 1px 8px;
-    border-radius: 9px;
-    border-width: 1px;
-    border-color: var(--qg-node-line);
-    background-color: var(--qg-node);
-    color: var(--qg-text);
-}
-
-.quest-graph__segment-button--on,
-.quest-graph__chip--on {
-    background-color: var(--qg-select);
-    border-color: var(--qg-select);
-    color: #ffffff;
+    width: 180px;
+    margin: 0 4px;
 }
 
 .quest-graph__chips {
     flex-direction: row;
-    flex-wrap: wrap;
+}
+
+.quest-graph__kind-chip {
+    align-items: center;
+}
+
+.quest-graph__kind-chip > .quest-graph__swatch {
+    margin-left: 6px;
+    margin-right: 0;
 }
 
 .quest-graph__band {
     position: absolute;
     left: 0;
     border-top-width: 1px;
-    border-color: var(--qg-grid-major);
+    border-color: var(--qg-band-line);
 }
 
 .quest-graph__band-name {
@@ -578,6 +565,7 @@
     letter-spacing: 1px;
     color: var(--qg-dim);
     border-left-width: 3px;
+    border-left-color: var(--qg-kind);
     padding-left: 6px;
 }
 
@@ -588,21 +576,13 @@
     border-width: 1px;
     border-left-width: 4px;
     border-color: var(--qg-node-line);
+    border-left-color: var(--qg-kind);
     border-radius: 5px;
     color: var(--qg-text);
 }
 
-.quest-graph__quest--selected {
-    border-top-color: var(--qg-select);
-    border-right-color: var(--qg-select);
-    border-bottom-color: var(--qg-select);
-    border-top-width: 2px;
-    border-right-width: 2px;
-    border-bottom-width: 2px;
-}
-
 .quest-graph__quest--faded {
-    opacity: 0.25;
+    opacity: 0.45;
 }
 
 .quest-graph__quest--match {
@@ -647,7 +627,12 @@
     border-color: var(--qg-wire);
     background-color: var(--qg-node);
     cursor: link;
-    opacity: 0.35;
+    opacity: 0;
+}
+
+.quest-graph__quest:hover > .quest-graph__handle,
+.quest-graph--selected > .quest-graph__handle {
+    opacity: 0.7;
 }
 
 .quest-graph__handle:hover {
@@ -655,13 +640,37 @@
     border-color: var(--qg-select);
 }
 
-.quest-graph__kind-0 { border-left-color: var(--qg-kind-0); }
-.quest-graph__kind-1 { border-left-color: var(--qg-kind-1); }
-.quest-graph__kind-2 { border-left-color: var(--qg-kind-2); }
-.quest-graph__kind-3 { border-left-color: var(--qg-kind-3); }
-.quest-graph__kind-4 { border-left-color: var(--qg-kind-4); }
-.quest-graph__kind-5 { border-left-color: var(--qg-kind-5); }
-.quest-graph__kind-6 { border-left-color: var(--qg-kind-none); }
+/* Kinds: each sets --qg-kind, which swatches, band names and quest edges read. */
+
+.quest-graph__kind--indigo { --qg-kind: var(--qg-kind-indigo); }
+.quest-graph__kind--green { --qg-kind: var(--qg-kind-green); }
+.quest-graph__kind--purple { --qg-kind: var(--qg-kind-purple); }
+.quest-graph__kind--orange { --qg-kind: var(--qg-kind-orange); }
+.quest-graph__kind--olive { --qg-kind: var(--qg-kind-olive); }
+.quest-graph__kind--grey { --qg-kind: var(--qg-kind-grey); }
+.quest-graph__kind--none { --qg-kind: var(--qg-kind-none); }
+
+/* Selection: a ring outside the node, so selecting never changes its border or moves what is inside. */
+
+.quest-graph__ring {
+    position: absolute;
+    left: -4px;
+    top: -4px;
+    right: -4px;
+    bottom: -4px;
+    border-width: 2px;
+    border-radius: 8px;
+    border-color: var(--qg-select);
+    display: none;
+}
+
+.quest-graph__quest > .quest-graph__ring {
+    left: -7px;
+}
+
+.quest-graph--selected > .quest-graph__ring {
+    display: flex;
+}
 
 .quest-graph__label--fails {
     border-color: var(--qg-fails);
@@ -669,8 +678,12 @@
 
 .quest-graph__flag {
     position: absolute;
-    padding: 3px 8px;
+    padding: 0 8px;
     font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    -unity-text-align: middle-left;
     border-width: 1.5px;
     border-radius: 3px;
     border-color: var(--qg-flag);

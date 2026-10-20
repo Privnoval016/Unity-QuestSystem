@@ -4,7 +4,11 @@ using UnityEngine.UIElements;
 
 namespace QuestSystem.EditorTools
 {
-    /** <summary>A short message at the bottom of the canvas, never a dialog: what just happened, with jump buttons and Undo.</summary> */
+    /**
+     * <summary>A short message at the bottom of the canvas, never a dialog: what just happened, with jump buttons and
+     * Undo. It hides on any Undo or Redo and whenever its screen does something else, so its Undo only ever undoes the
+     * change it reports.</summary>
+     */
     public sealed class Notice : VisualElement
     {
         #region Private Fields
@@ -22,6 +26,8 @@ namespace QuestSystem.EditorTools
             AddToClassList("quest-graph__notice");
             pickingMode = PickingMode.Position;
             style.display = DisplayStyle.None;
+            RegisterCallback<AttachToPanelEvent>(_ => Undo.undoRedoPerformed += Hide);
+            RegisterCallback<DetachFromPanelEvent>(_ => Undo.undoRedoPerformed -= Hide);
         }
 
         /** <summary>Shows a message, with optional buttons, and an Undo button when asked.</summary> */
@@ -39,8 +45,8 @@ namespace QuestSystem.EditorTools
             {
                 var undo = new Button(() =>
                 {
-                    Undo.PerformUndo();
                     Hide();
+                    Undo.PerformUndo();
                 }) { text = "Undo" };
                 Add(undo);
             }
@@ -50,7 +56,11 @@ namespace QuestSystem.EditorTools
         }
 
         /** <summary>Hides the notice.</summary> */
-        public void Hide() => style.display = DisplayStyle.None;
+        public void Hide()
+        {
+            _hide?.Pause();
+            style.display = DisplayStyle.None;
+        }
 
         #endregion
     }

@@ -26,8 +26,9 @@ namespace QuestSystem.EditorTools
 
     /**
      * <summary>Places wire labels so they are always readable: each takes the first spot along its own wire that
-     * touches no node, no other label and no other wire, and keeps clear of both ends so arrowheads show. When no
-     * spot is clear it takes the one that covers least.</summary>
+     * touches no node, no other label and no other wire, keeps clear of both ends so arrowheads show, and keeps a
+     * little room from other nodes so it never reads as theirs. When no spot is clear it takes the one that covers
+     * least.</summary>
      */
     public static class LabelPlacer
     {
@@ -39,7 +40,20 @@ namespace QuestSystem.EditorTools
         /** <summary>Space kept around a label.</summary> */
         private const float Padding = 2f;
 
+        /** <summary>How many segments a wire is checked as.</summary> */
         private const int WireSamples = 32;
+
+        /** <summary>The cost of a spot that covers a node or another label: never chosen while any spot doesn't.</summary> */
+        private const float CoverNodeOrLabel = 1000f;
+
+        /** <summary>The cost of a spot for each other wire it covers.</summary> */
+        private const float CrossWire = 10f;
+
+        /** <summary>How close to a node a label may sit before it could be read as that node's own.</summary> */
+        private const float NodeMargin = 24f;
+
+        /** <summary>The cost of a spot that crowds a node without covering it.</summary> */
+        private const float CrowdNode = 5f;
 
         #endregion
 
@@ -51,20 +65,28 @@ namespace QuestSystem.EditorTools
         /** <summary>How far a label keeps from the wire's start, past its own half-width.</summary> */
         public const float StartClearance = 12f;
 
-        /** <summary>The centre of each label, in order. Obstacles are the nodes' rects.</summary> */
+        /**
+         * <summary>The centre of each label, in order. Obstacles are the nodes' rects. Nodes, placed labels and wire
+         * segments sit in a grid, so each check looks only at the cells a label covers.</summary>
+         */
         public static Vector2[] Place(IReadOnlyList<LabelRequest> labels, IReadOnlyList<Rect> obstacles)
         {
-            var samples = new List<Vector2>[labels.Count];
-            var bounds = new Rect[labels.Count];
+            var nodes = new CellGrid<Rect>();
+            foreach (var obstacle in obstacles)
+                nodes.Add(Inflate(obstacle, NodeMargin), obstacle);
+            var segments = new CellGrid<(int wire, Vector2 a, Vector2 b)>();
+            var points = new List<Vector2>(WireSamples + 1);
             for (var i = 0; i < labels.Count; i++)
             {
-                samples[i] = new List<Vector2>(WireSamples + 1);
-                WireCurve.Sample(labels[i].From, labels[i].To, WireSamples, samples[i]);
-                bounds[i] = WireCurve.Bounds(labels[i].From, labels[i].To);
+                points.Clear();
+                WireCurve.Sample(labels[i].From, labels[i].To, WireSamples, points);
+                for (var k = 1; k < points.Count; k++)
+                    segments.Add(Rect.MinMaxRect(Mathf.Min(points[k - 1].x, points[k].x), Mathf.Min(points[k - 1].y, points[k].y), Mathf.Max(points[k - 1].x, points[k].x), Mathf.Max(points[k - 1].y, points[k].y)), (i, points[k - 1], points[k]));
             }
 
-            var placed = new List<Rect>(labels.Count);
+            var placed = new CellGrid<Rect>();
             var centres = new Vector2[labels.Count];
+            var crossed = new HashSet<int>();
             for (var i = 0; i < labels.Count; i++)
             {
                 var label = labels[i];
@@ -77,12 +99,17 @@ namespace QuestSystem.EditorTools
                     if (Vector2.Distance(centre, label.To) < half + EndClearance || Vector2.Distance(centre, label.From) < half + StartClearance) continue;
                     var box = Box(centre, label.Size);
                     var score = Mathf.Abs(t - 0.5f);
-                    foreach (var obstacle in obstacles)
-                        if (box.Overlaps(obstacle)) score += 1000f;
-                    foreach (var other in placed)
-                        if (box.Overlaps(other)) score += 1000f;
-                    for (var j = 0; j < samples.Length; j++)
-                        if (j != i && bounds[j].Overlaps(box) && Crosses(samples[j], box)) score += 10f;
+                    foreach (var node in nodes.Near(box))
+                    {
+                        if (box.Overlaps(node)) score += CoverNodeOrLabel;
+                        else if (box.Overlaps(Inflate(node, NodeMargin)) && !IsEndOf(node, label)) score += CrowdNode;
+                    }
+                    foreach (var other in placed.Near(box))
+                        if (box.Overlaps(other)) score += CoverNodeOrLabel;
+                    crossed.Clear();
+                    foreach (var (wire, a, b) in segments.Near(box))
+                        if (wire != i && !crossed.Contains(wire) && SegmentCrosses(a, b, box)) crossed.Add(wire);
+                    score += crossed.Count * CrossWire;
                     if (score < bestScore)
                     {
                         bestScore = score;
@@ -91,7 +118,8 @@ namespace QuestSystem.EditorTools
                     if (score < 1f) break;
                 }
                 centres[i] = best;
-                placed.Add(Box(best, label.Size));
+                var chosen = Box(best, label.Size);
+                placed.Add(chosen, chosen);
             }
             return centres;
         }
@@ -103,18 +131,19 @@ namespace QuestSystem.EditorTools
 
         #region Helpers
 
-        private static bool Crosses(List<Vector2> wire, Rect box)
+        /** <summary>True when a node is one the label's own wire starts or ends on, whose edge its ports sit on.</summary> */
+        private static bool IsEndOf(Rect node, LabelRequest label)
         {
-            foreach (var point in wire)
-                if (box.Contains(point)) return true;
-            for (var i = 1; i < wire.Count; i++)
-                if (SegmentCrosses(wire[i - 1], wire[i], box)) return true;
-            return false;
+            var edge = Inflate(node, 1f);
+            return edge.Contains(label.From) || edge.Contains(label.To);
         }
+
+        private static Rect Inflate(Rect rect, float by) => new Rect(rect.x - by, rect.y - by, rect.width + by * 2f, rect.height + by * 2f);
 
         /** <summary>True when a segment passes through a rect: either end inside, or it crosses an edge.</summary> */
         private static bool SegmentCrosses(Vector2 a, Vector2 b, Rect box)
         {
+            if (box.Contains(a) || box.Contains(b)) return true;
             if (Mathf.Max(a.x, b.x) < box.xMin || Mathf.Min(a.x, b.x) > box.xMax || Mathf.Max(a.y, b.y) < box.yMin || Mathf.Min(a.y, b.y) > box.yMax) return false;
             Vector2 topLeft = new Vector2(box.xMin, box.yMin), topRight = new Vector2(box.xMax, box.yMin);
             Vector2 bottomRight = new Vector2(box.xMax, box.yMax), bottomLeft = new Vector2(box.xMin, box.yMax);
@@ -129,6 +158,48 @@ namespace QuestSystem.EditorTools
             var d3 = Cross(p1, p2, q1);
             var d4 = Cross(p1, p2, q2);
             return d1 * d2 < 0f && d3 * d4 < 0f;
+        }
+
+        /** <summary>Items bucketed by the grid cells their bounds touch, for finding what is near a rect quickly.</summary> */
+        private sealed class CellGrid<T>
+        {
+            private const float CellSize = 160f;
+            private readonly List<T> _items = new List<T>();
+            private readonly Dictionary<(int, int), List<int>> _cells = new Dictionary<(int, int), List<int>>();
+            private readonly List<T> _found = new List<T>();
+            private readonly HashSet<int> _seen = new HashSet<int>();
+
+            public void Add(Rect bounds, T item)
+            {
+                var index = _items.Count;
+                _items.Add(item);
+                foreach (var cell in Cells(bounds))
+                {
+                    if (!_cells.TryGetValue(cell, out var list)) _cells[cell] = list = new List<int>();
+                    list.Add(index);
+                }
+            }
+
+            /** <summary>Every item whose bounds share a cell with the rect, each once.</summary> */
+            public List<T> Near(Rect rect)
+            {
+                _found.Clear();
+                _seen.Clear();
+                foreach (var cell in Cells(rect))
+                    if (_cells.TryGetValue(cell, out var list))
+                        foreach (var index in list)
+                            if (_seen.Add(index)) _found.Add(_items[index]);
+                return _found;
+            }
+
+            private static IEnumerable<(int, int)> Cells(Rect rect)
+            {
+                int x0 = Mathf.FloorToInt(rect.xMin / CellSize), x1 = Mathf.FloorToInt(rect.xMax / CellSize);
+                int y0 = Mathf.FloorToInt(rect.yMin / CellSize), y1 = Mathf.FloorToInt(rect.yMax / CellSize);
+                for (var x = x0; x <= x1; x++)
+                    for (var y = y0; y <= y1; y++)
+                        yield return (x, y);
+            }
         }
 
         #endregion

@@ -86,6 +86,40 @@ namespace QuestSystem.Tests
         }
 
         [Test]
+        public void AQuestRemovedAndBack_KeepsTheQuestsThatReadIt()
+        {
+            var a = _kit.Quest("A", new[] { Step("s") });
+            var b = _kit.Quest("B", new[] { Step("s") }, new QuestSettings { AvailableWhen = new QuestStateCondition(a) });
+            var index = new QuestIndex();
+            index.Refresh(a);
+            index.Refresh(b);
+            index.Remove(a);
+            index.Refresh(a);
+            Assert.That(index.ReadersOf(a).Select(link => link.Reader), Is.EqualTo(new[] { b }), "as when Undo brings a deleted quest back");
+        }
+
+        [Test]
+        public void ABatch_AnnouncesEachChangedQuestOnce_WhenItEnds()
+        {
+            var a = _kit.Quest("A", new[] { Step("s") });
+            var b = _kit.Quest("B", new[] { Step("s") });
+            var index = new QuestIndex();
+            var changed = new List<QuestDefinition>();
+            index.OnChanged += changed.Add;
+            using (index.Batch())
+            {
+                index.Refresh(a);
+                using (index.Batch())
+                    index.Refresh(b);
+                index.Refresh(a);
+                Assert.That(changed, Is.Empty, "nothing is announced until the outer batch ends");
+            }
+            Assert.That(changed, Is.EquivalentTo(new[] { a, b }));
+            index.Refresh(a);
+            Assert.That(changed, Has.Count.EqualTo(3), "outside a batch each change is announced at once");
+        }
+
+        [Test]
         public void DestroyedQuests_AreForgotten()
         {
             var a = _kit.Quest("A", new[] { Step("s") });

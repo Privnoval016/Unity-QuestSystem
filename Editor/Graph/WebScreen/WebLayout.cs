@@ -37,8 +37,11 @@ namespace QuestSystem.EditorTools
         /** <summary>How wide a quest node is.</summary> */
         public const float NodeWidth = 196f;
 
-        /** <summary>Space from one column's left edge to the next.</summary> */
-        public const float ColumnWidth = 320f;
+        /** <summary>How tall a quest node is: always the same, so wires and labels can be placed before it is measured.</summary> */
+        public const float NodeHeight = 52f;
+
+        /** <summary>Space from one column's left edge to the next, leaving room between columns for wire labels.</summary> */
+        public const float ColumnWidth = 340f;
 
         /** <summary>Space from one row's top to the next.</summary> */
         public const float RowHeight = 74f;
@@ -74,7 +77,7 @@ namespace QuestSystem.EditorTools
             var bands = new List<WebBand>();
             var rowOf = new Dictionary<QuestDefinition, float>();
             var top = 0f;
-            foreach (var band in quests.GroupBy(quest => quest.Kind).OrderBy(group => group.Key == null ? int.MaxValue : group.Key.Order).ThenBy(group => group.Key == null ? "" : group.Key.name))
+            foreach (var band in quests.GroupBy(quest => quest.Kind).OrderBy(group => group.Key == null ? int.MaxValue : group.Key.Order).ThenBy(group => QuestStates.NameOf(group.Key)))
             {
                 var rows = 1;
                 foreach (var column in band.GroupBy(Depth).OrderBy(group => group.Key))

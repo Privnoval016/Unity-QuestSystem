@@ -6,33 +6,33 @@ using UnityEngine;
 
 namespace QuestSystem
 {
-    /** <summary>How a step's objectives complete it.</summary> */
+    /** <summary>How a step's objectives complete it. The values are saved in assets: never reorder or renumber them.</summary> */
     public enum StepCompletion
     {
         /** <summary>Every objective that isn't optional is done. A step with none is done as soon as it starts.</summary> */
-        AllRequired,
+        AllRequired = 0,
         /** <summary>Any one objective is done.</summary> */
-        AnyOne,
+        AnyOne = 1,
     }
 
-    /** <summary>When a step starts, before its unlock condition (if any) is also asked.</summary> */
+    /** <summary>When a step starts, before its unlock condition (if any) is also asked. The values are saved in assets: never reorder or renumber them.</summary> */
     public enum StepStart
     {
-        /** <summary>After the step above it is done; the first step starts with the quest. With an unlock condition, when that holds instead. Either way it follows the step above.</summary> */
-        AfterStepAbove,
+        /** <summary>After the step above it; the first step starts with the quest. An unlock condition replaces the wait. It follows the step above for endings.</summary> */
+        AfterStepAbove = 0,
         /** <summary>After its linked steps are done, all of them or any one; and when its unlock condition holds, if it has one.</summary> */
-        AfterLinkedSteps,
+        AfterLinkedSteps = 1,
         /** <summary>With the quest; and when its unlock condition holds, if it has one.</summary> */
-        WithQuest,
+        WithQuest = 2,
     }
 
-    /** <summary>How a step's links start it.</summary> */
+    /** <summary>How a step's links start it. The values are saved in assets: never reorder or renumber them.</summary> */
     public enum StepJoin
     {
         /** <summary>Once every linked step is done.</summary> */
-        All,
+        All = 0,
         /** <summary>Once any one linked step is done.</summary> */
-        Any,
+        Any = 1,
     }
 
     /** <summary>One stage of a quest: a set of objectives that starts after other steps or by a condition.</summary> */
@@ -76,6 +76,7 @@ namespace QuestSystem
         [Tooltip("What the step asks for.")]
         [SerializeField] private List<QuestObjective> objectives = new List<QuestObjective>();
 
+        [Tooltip("Where the quest graph draws the step. The game never reads it.")]
         [HideInInspector]
         [SerializeField] private Vector2 graphPosition;
 

@@ -16,10 +16,13 @@ namespace QuestSystem.EditorTools
         private const float WheelStep = 0.08f;
         private const float CullMargin = 64f;
 
+        /** <summary>Below this zoom wire labels are hidden: too small to read, and too many to lay out.</summary> */
+        private const float LabelZoom = 0.5f;
+
         private readonly CanvasGrid _grid = new CanvasGrid();
         private readonly VisualElement _content = new VisualElement();
         private readonly VisualElement _marquee = new VisualElement();
-        private CanvasView _view = new CanvasView(Vector2.zero, 1f);
+        private CanvasView _view = CanvasView.Default;
         private Vector2 _dragStart;
         private CanvasView _panStart;
         private bool _panning;
@@ -84,6 +87,7 @@ namespace QuestSystem.EditorTools
             RegisterCallback<PointerMoveEvent>(HandlePointerMove);
             RegisterCallback<PointerUpEvent>(HandlePointerUp);
             RegisterCallback<WheelEvent>(HandleWheel);
+            RegisterCallback<PointerCaptureOutEvent>(_ => EndGesture());
             RegisterCallback<GeometryChangedEvent>(_ => ApplyView());
         }
 
@@ -95,11 +99,6 @@ namespace QuestSystem.EditorTools
             OnViewChanged(_view);
         }
 
-        /** <summary>Fits a content rect in the canvas; does nothing before the canvas has a size.</summary> */
-        public void Frame(Rect content)
-        {
-            if (CanvasView.HasSize(layout.size)) SetView(CanvasView.Framing(content, layout.size));
-        }
 
         /** <summary>True once the canvas has been laid out and has a size.</summary> */
         public bool HasSize => CanvasView.HasSize(layout.size);
@@ -110,6 +109,7 @@ namespace QuestSystem.EditorTools
         /** <summary>Hides nodes and labels off screen, and shows those that came back. Call after adding or moving many.</summary> */
         public void Cull()
         {
+            Labels.style.display = _view.Zoom >= LabelZoom ? DisplayStyle.Flex : DisplayStyle.None;
             if (!HasSize)
             {
                 foreach (var child in Nodes.Children()) child.visible = true;
@@ -131,13 +131,13 @@ namespace QuestSystem.EditorTools
         {
             if (!IsBackground(evt.target)) return;
             var local = this.WorldToLocal(evt.position);
-            if (evt.button == 2 || (evt.button == 0 && evt.altKey))
+            if (evt.button == (int)MouseButton.MiddleMouse || (evt.button == (int)MouseButton.LeftMouse && evt.altKey))
             {
                 _panning = true;
                 _panStart = _view;
                 _dragStart = local;
             }
-            else if (evt.button == 0)
+            else if (evt.button == (int)MouseButton.LeftMouse)
             {
                 _selecting = true;
                 _additive = evt.shiftKey || evt.actionKey;
@@ -174,11 +174,10 @@ namespace QuestSystem.EditorTools
             {
                 _marquee.style.display = DisplayStyle.None;
                 var box = Box(_dragStart, local);
-                if (box.width < 4f && box.height < 4f) OnBackgroundClicked(_view.ToContent(local), _additive);
+                if (box.width < GraphMetrics.ClickThreshold && box.height < GraphMetrics.ClickThreshold) OnBackgroundClicked(_view.ToContent(local), _additive);
                 else OnMarquee(Rect.MinMaxRect(_view.ToContent(box.min).x, _view.ToContent(box.min).y, _view.ToContent(box.max).x, _view.ToContent(box.max).y), _additive);
             }
-            _panning = false;
-            _selecting = false;
+            EndGesture();
             evt.StopPropagation();
         }
 
@@ -193,6 +192,14 @@ namespace QuestSystem.EditorTools
 
         #region Helpers
 
+        /** <summary>Ends a pan or a selection box, as when the pointer is released or capture is lost.</summary> */
+        private void EndGesture()
+        {
+            _panning = false;
+            _selecting = false;
+            _marquee.style.display = DisplayStyle.None;
+        }
+
         private bool IsBackground(IEventHandler target) =>
             target == this || target == _content || target == _grid || target == Nodes || target == Labels || target == Wires || target == Background
             || (target is VisualElement element && Background.Contains(element));
@@ -205,11 +212,11 @@ namespace QuestSystem.EditorTools
             Cull();
         }
 
+        /** <summary>Hides children outside the visible rect; one added since the last layout has no size yet, so it stays shown until measured.</summary> */
         private static void CullChildren(VisualElement layer, Rect visible)
         {
             foreach (var child in layer.Children())
             {
-                // An element added since the last layout has no size yet; show it until it can be measured.
                 if (!CanvasView.HasSize(child.layout.size))
                 {
                     child.visible = true;

@@ -3,6 +3,7 @@ using System.Diagnostics;
 using NUnit.Framework;
 using QuestSystem.EditorTools;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace QuestSystem.Tests
 {
@@ -36,19 +37,80 @@ namespace QuestSystem.Tests
             var view = new CanvasView(nan, float.NaN);
             Assert.That(view.Pan, Is.EqualTo(Vector2.zero));
             Assert.That(view.Zoom, Is.EqualTo(1f));
-            var framed = CanvasView.Framing(new Rect(0, 0, 500, 300), nan);
+            var framed = CanvasView.FramingBelow(new Rect(0, 0, 500, 300), nan, 40f, 20f, CanvasView.MinZoom);
             Assert.That(float.IsFinite(framed.Zoom) && float.IsFinite(framed.Pan.x));
         }
 
         [Test]
-        public void Framing_FitsTheContent_AndNeverZoomsPast100Percent()
+        public void Framing_FitsTheContentBelowTheTop_AndNeverZoomsPast100Percent()
         {
-            var big = CanvasView.Framing(new Rect(0, 0, 4000, 1000), new Vector2(1000, 800));
-            var visible = big.Visible(new Vector2(1000, 800));
-            Assert.That(visible.xMin, Is.LessThanOrEqualTo(0f));
-            Assert.That(visible.xMax, Is.GreaterThanOrEqualTo(4000f));
-            Assert.That(CanvasView.Framing(new Rect(0, 0, 100, 100), new Vector2(1000, 800)).Zoom, Is.EqualTo(1f));
-            Assert.That(CanvasView.Framing(new Rect(5, 5, 0, 0), new Vector2(100, 100)).Zoom, Is.EqualTo(1f));
+            var viewport = new Vector2(1000, 800);
+            var big = CanvasView.FramingBelow(new Rect(0, 0, 2000, 500), viewport, 60f, 20f, CanvasView.MinZoom);
+            Assert.That(big.Zoom, Is.EqualTo(0.48f).Within(1e-4f), "960 wide fits 2000");
+            AssertNear(big.ToScreen(new Vector2(0, 0)), new Vector2(20, 60));
+            AssertNear(big.ToScreen(new Vector2(2000, 0)), new Vector2(980, 60));
+
+            var small = CanvasView.FramingBelow(new Rect(100, 100, 200, 100), viewport, 60f, 20f, CanvasView.MinZoom);
+            Assert.That(small.Zoom, Is.EqualTo(CanvasView.MaxFitZoom));
+            AssertNear(small.ToScreen(new Vector2(100, 100)), new Vector2(400, 60));
+            Assert.That(CanvasView.FramingBelow(new Rect(5, 5, 0, 0), viewport, 0f, 0f, CanvasView.MinZoom).Zoom, Is.EqualTo(CanvasView.MaxFitZoom));
+        }
+
+        [Test]
+        public void Framing_WithAMinimumZoom_StartsFromTheLeftWhenItCantFit()
+        {
+            var view = CanvasView.FramingBelow(new Rect(-50, 0, 4000, 500), new Vector2(1000, 800), 60f, 20f, 0.8f);
+            Assert.That(view.Zoom, Is.EqualTo(0.8f));
+            AssertNear(view.ToScreen(new Vector2(-50, 0)), new Vector2(20, 60));
+        }
+
+        [Test]
+        public void TheUnionOfRects_HoldsThemAll()
+        {
+            Assert.That(CanvasView.Union(new Rect[0]), Is.EqualTo(new Rect()));
+            Assert.That(CanvasView.Union(new[] { new Rect(0, 0, 10, 10), new Rect(-5, 20, 10, 10) }), Is.EqualTo(Rect.MinMaxRect(-5, 0, 10, 30)));
+        }
+
+        [Test]
+        public void Ports_SpreadEvenlyInsideTheEdge()
+        {
+            Assert.That(PortLayout.Spread(0, 0f, 52f), Is.Empty);
+            Assert.That(PortLayout.Spread(1, 100f, 52f), Is.EqualTo(new[] { 126f }));
+            var three = PortLayout.Spread(3, 0f, 52f);
+            Assert.That(three[0], Is.GreaterThan(PortLayout.Inset));
+            Assert.That(three[2], Is.LessThan(52f - PortLayout.Inset));
+            Assert.That(three[1] - three[0], Is.EqualTo(three[2] - three[1]).Within(1e-4f));
+        }
+
+        [Test]
+        public void Dragging_WaitsForTheThreshold_ScalesByZoom_AndSnaps()
+        {
+            var drag = new NodeDrag<string>();
+            Assert.That(drag.Move(Vector2.zero, 1f), Is.Null, "nothing to move before a press");
+            drag.Begin(new Dictionary<string, Vector2> { ["a"] = Vector2.zero, ["b"] = new Vector2(100, 0) }, new Vector2(10, 10));
+            Assert.That(drag.Active);
+            Assert.That(drag.Move(new Vector2(11, 11), 1f), Is.Null, "within the threshold it is still a click");
+            Assert.That(drag.Moved, Is.False);
+            var moved = drag.Move(new Vector2(40, 10), 0.5f);
+            Assert.That(moved["a"], Is.EqualTo(new Vector2(60, 0)));
+            Assert.That(moved["b"], Is.EqualTo(new Vector2(160, 0)));
+            Assert.That(drag.Keys, Is.EquivalentTo(new[] { "a", "b" }));
+            Assert.That(drag.End(), "it became a drag");
+            Assert.That(drag.Active, Is.False);
+            Assert.That(drag.End(), Is.False);
+        }
+
+        [Test]
+        public void StoryFlags_SitAboveTheirFirstReader_InRowsThatNeverOverlap()
+        {
+            var places = FlagRows.Place(new[] { 100f, 120f, 600f, 640f }, 200f);
+            Assert.That(places[0], Is.EqualTo(new Vector2(100f - FlagRows.Lead, 200f - FlagRows.RowAbove)));
+            Assert.That(places[1].y, Is.EqualTo(200f - FlagRows.RowAbove - FlagRows.RowStep), "too close to the first, so a row up");
+            Assert.That(places[2].y, Is.EqualTo(200f - FlagRows.RowAbove), "far enough along to share the first row");
+            for (var i = 0; i < places.Count; i++)
+                for (var j = i + 1; j < places.Count; j++)
+                    Assert.That(new Rect(places[i], new Vector2(FlagRows.FlagWidth, FlagRows.FlagHeight)).Overlaps(new Rect(places[j], new Vector2(FlagRows.FlagWidth, FlagRows.FlagHeight))), Is.False, $"flags {i} and {j}");
+            Assert.That(FlagRows.Place(new float[0], 0f), Is.Empty);
         }
 
         [Test]
@@ -68,15 +130,15 @@ namespace QuestSystem.Tests
 
         /**
          * <summary>Nodes in columns, spaced as the web lays quests out, each wired to the next column's same row and
-         * every other one fanning out to the row below. Ports spread along each node's edge, ordered by where the
-         * other end sits, as the web draws them.</summary>
+         * every other one fanning out to the row below. Ports spread along each node's edge with the web's own
+         * <see cref="PortLayout" />, ordered by where the other end sits.</summary>
          */
         private static (List<Rect> nodes, List<LabelRequest> labels) Web(int columns, int rows)
         {
             var nodes = new List<Rect>();
             for (var c = 0; c < columns; c++)
                 for (var r = 0; r < rows; r++)
-                    nodes.Add(new Rect(100 + c * 320, 40 + r * 120, 196, 52));
+                    nodes.Add(new Rect(WebLayout.Left + c * WebLayout.ColumnWidth, 40 + r * 120, WebLayout.NodeWidth, WebLayout.NodeHeight));
             var edges = new List<(int from, int to)>();
             for (var c = 0; c + 1 < columns; c++)
                 for (var r = 0; r < rows; r++)
@@ -90,7 +152,7 @@ namespace QuestSystem.Tests
                 for (var i = 0; i < edges.Count; i++)
                     if ((outgoing ? edges[i].from : edges[i].to) == node) mine.Add(i);
                 mine.Sort((a, b) => nodes[outgoing ? edges[a].to : edges[a].from].y.CompareTo(nodes[outgoing ? edges[b].to : edges[b].from].y));
-                return nodes[node].y + nodes[node].height * (mine.IndexOf(edge) + 1) / (mine.Count + 1);
+                return PortLayout.Spread(mine.Count, nodes[node].y, nodes[node].height)[mine.IndexOf(edge)];
             }
             var labels = new List<LabelRequest>();
             for (var i = 0; i < edges.Count; i++)
@@ -129,12 +191,29 @@ namespace QuestSystem.Tests
         }
 
         [Test]
-        public void ACrowdedWire_StillGetsALabel_AtTheSpotThatCoversLeast()
+        public void AWireTooShortToKeepClearOfItsEnds_StillGetsALabel_AtItsMiddle()
         {
             var labels = new List<LabelRequest> { new LabelRequest(new Vector2(0, 0), new Vector2(60, 0), new Vector2(70, 16)) };
             var centres = LabelPlacer.Place(labels, new List<Rect>());
             Assert.That(centres, Has.Length.EqualTo(1));
-            AssertNear(centres[0], new Vector2(30, 0));
+            AssertNear(centres[0], WireCurve.Point(labels[0].From, labels[0].To, 0.5f));
+        }
+
+        [Test]
+        public void ALabel_MovesAlongItsWire_ToGetOffANode()
+        {
+            var labels = new List<LabelRequest> { new LabelRequest(new Vector2(0, 0), new Vector2(400, 0), new Vector2(40, 16)) };
+            var node = new Rect(150, -20, 100, 40);
+            var centre = LabelPlacer.Place(labels, new List<Rect> { node })[0];
+            Assert.That(LabelPlacer.Box(centre, labels[0].Size).Overlaps(node), Is.False);
+        }
+
+        [Test]
+        public void AWireCoveredEverywhere_StillGetsALabel_AtItsMiddle()
+        {
+            var labels = new List<LabelRequest> { new LabelRequest(new Vector2(0, 0), new Vector2(400, 0), new Vector2(40, 16)) };
+            var centre = LabelPlacer.Place(labels, new List<Rect> { new Rect(-50, -50, 500, 100) })[0];
+            AssertNear(centre, WireCurve.Point(labels[0].From, labels[0].To, 0.5f));
         }
 
         [Test]
@@ -144,7 +223,7 @@ namespace QuestSystem.Tests
             var watch = Stopwatch.StartNew();
             LabelPlacer.Place(labels, nodes);
             watch.Stop();
-            UnityEngine.Debug.Log($"Quest graph: placed {labels.Count} labels among {nodes.Count} nodes in {watch.ElapsedMilliseconds} ms");
+            Debug.Log($"Quest graph: placed {labels.Count} labels among {nodes.Count} nodes in {watch.ElapsedMilliseconds} ms");
             Assert.That(watch.ElapsedMilliseconds, Is.LessThan(1000));
         }
     }

@@ -78,9 +78,10 @@ Conditions are Extensions' `ICondition<IFacts>`: the same conditions the game us
   objective progress, for conditions a game writes.
 - **Tools read quest links from conditions.** `QuestStateCondition` and `StepStateCondition` are `IQuestReference`s
   (the quest, the step, the state). A game's own condition on quests implements it to appear in the quest graph
-  and in "read by" lists. `QuestReferences.Collect` finds them anywhere in a condition tree, and counts parts that
-  can't say what they read. Conditions and trackers summarize themselves in one line (`ToString`), for the graph's
-  nodes.
+  and in "read by" lists, and `IStepRetargetable` too if it names a step, so pasted steps point at their copies.
+  `QuestReferences.Collect` finds them anywhere in a condition tree, and counts parts that can't say what they read.
+  Trackers that hold conditions implement `IConditionHolder`. Conditions and trackers summarize themselves in one
+  line (`ToString`), for the graph's nodes.
 - **Checks are change-driven.** Every condition says what it reads, so a change checks only the quests that read
   it. A custom condition that doesn't say is checked after every change, so it still works.
 
@@ -173,9 +174,10 @@ every set flag, and the active quest, all by id.
 
 *Window > Quests > Quest Graph*, or double-click a quest asset. Two screens, with back and forward between them:
 
-- **The web** shows every quest in a band per kind, wired by the conditions that read other quests. Each wire is
-  labelled with what it asks for ("needs done", "fails if done", "needs step done"). Labels never cover a quest,
-  another label, another wire or an arrowhead.
+- **The web** shows every quest in a band per kind, in the colour the kind picks (*Graph Colour* on the kind),
+  wired by the conditions that read other quests. Each wire is labelled with what it asks for ("needs done", "fails
+  if done", "needs step done"). A label takes the first spot along its wire that covers no quest, label, wire or
+  arrowhead and doesn't crowd another quest; where none is free it takes the one that covers least.
   - **Views:** dependencies, or story flags with the quests that read each.
   - **Find:** search titles and steps, filter by kind or property, click a quest to focus its direct links or whole
     chain, and press Enter or double-click to open it.
@@ -192,9 +194,11 @@ every set flag, and the active quest, all by id.
 - **Controls:** the middle mouse or Alt-drag pans, the wheel zooms, dragging on empty canvas selects, F frames the
   selection and A everything.
 - **Safety:** every change is one Undo step. Deleting a step rewires the steps after it to keep their order, and
-  notes any other quest that reads it. Nothing opens a dialog, and opening the graph never changes an asset.
+  notes any other quest that reads it, with an Undo button that goes away as soon as anything else happens. Nothing
+  opens a dialog, and opening the graph never changes an asset.
 - **Positions** are saved in the assets (steps' places in their quest, pinned quests' places in the web), on a
-  10-unit grid so moves make small diffs. The game never reads them.
+  10-unit grid so moves make small diffs. A quest's steps are laid out automatically until its first edit in the
+  graph, which saves every step where it was drawn. The game never reads them.
 - **Custom conditions** on quests implement `IQuestReference` to appear as wires; a condition that can't say what it
   reads is counted in the status bar instead.
 

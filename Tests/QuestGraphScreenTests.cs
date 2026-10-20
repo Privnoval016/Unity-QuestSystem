@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Linq;
 using Extensions.Logic;
@@ -56,6 +57,38 @@ namespace QuestSystem.Tests
         }
 
         [Test]
+        public void Cards_NameTheirRules_AndOnlyStepsNothingFollowsEnd_WhenNoneIsMarked()
+        {
+            var flag = _kit.Flag("Ready");
+            var quest = _kit.Quest("Ends", new[]
+            {
+                Step("a", new StepSettings { UnlockWhen = new FlagCondition(flag) }),
+                Step("b", new StepSettings { Start = StepStart.WithQuest }),
+            });
+            var cards = StepCard.Of(quest, QuestValidator.Validate(quest)).ToDictionary(card => card.Id);
+            Assert.That(cards["a"].Rules.Single().Label, Is.EqualTo("Unlock if"), "a condition in place of following the step above");
+            Assert.That(cards["b"].Tags, Is.EqualTo(new[] { StepTag.WithQuest, StepTag.EndsByDefault, StepTag.ShownEarly }));
+
+            quest.Configure(new[] { Step("a", new StepSettings { EndsQuest = true }), Step("b", new StepSettings { Start = StepStart.WithQuest }) });
+            cards = StepCard.Of(quest, QuestValidator.Validate(quest)).ToDictionary(card => card.Id);
+            Assert.That(cards["a"].Tags, Has.Member(StepTag.Ends));
+            Assert.That(cards["b"].Tags, Has.No.Member(StepTag.EndsByDefault), "a marked end means only marked steps end it");
+        }
+
+        [Test]
+        public void EveryTag_ReadsAsAPill()
+        {
+            foreach (StepTag tag in Enum.GetValues(typeof(StepTag)))
+            {
+                var look = StepTagLook.Of(tag, 3);
+                Assert.That(look.Text, Is.Not.Empty, tag.ToString());
+                Assert.That(look.ClassName, Does.StartWith("quest-graph__pill--"), tag.ToString());
+                Assert.That(look.Meaning, Is.Not.Empty, tag.ToString());
+            }
+            Assert.That(StepTagLook.Of(StepTag.AnyOne, 3).Text, Is.EqualTo("Any 1 of 3"));
+        }
+
+        [Test]
         public void TheLayout_PutsStepsInColumnsByWhatTheyFollow_AndSurvivesLoops()
         {
             var quest = _kit.Quest("Fork", new[]
@@ -71,6 +104,8 @@ namespace QuestSystem.Tests
             Assert.That(positions.Keys, Is.EquivalentTo(new[] { "a", "b", "c", "d", "x", "y" }));
             Assert.That(StepLayout.NeedsLayout(quest));
             quest.Steps[0].SetGraphPosition(new Vector2(10, 10));
+            Assert.That(StepLayout.NeedsLayout(quest), "one step placed doesn't make the quest arranged");
+            quest.SetGraphArranged(true);
             Assert.That(StepLayout.NeedsLayout(quest), Is.False);
         }
 
@@ -84,10 +119,11 @@ namespace QuestSystem.Tests
             AssetDatabase.CreateAsset(quest, Folder + "/Smoke.asset");
             AssetDatabase.SaveAssets();
 
-            var window = EditorWindow.GetWindow<QuestGraphWindow>();
+            var window = ScriptableObject.CreateInstance<QuestGraphWindow>();
             try
             {
-                QuestGraphWindow.Open(quest);
+                window.Show();
+                window.ShowQuest(quest);
                 for (var i = 0; i < 5; i++) yield return null;
                 var root = window.rootVisualElement;
                 var screen = root.Q<QuestScreen>();
@@ -99,6 +135,7 @@ namespace QuestSystem.Tests
             finally
             {
                 window.Close();
+                QuestGraphFocus.Forget(quest);
             }
         }
     }

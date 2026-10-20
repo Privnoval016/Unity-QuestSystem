@@ -21,6 +21,10 @@ namespace QuestSystem
             _ => "failed",
         };
 
+        /** <summary>A kind's display name, or its asset name without one; "No kind" when unset.</summary> */
+        public static string NameOf(QuestKind kind) =>
+            kind == null ? "No kind" : string.IsNullOrWhiteSpace(kind.DisplayName) ? kind.name : kind.DisplayName;
+
         /** <summary>A quest's title, or its asset name without one; "no quest" when unset.</summary> */
         public static string TitleOf(QuestDefinition quest) =>
             quest == null ? "no quest" : string.IsNullOrWhiteSpace(quest.Title) ? quest.name : quest.Title;

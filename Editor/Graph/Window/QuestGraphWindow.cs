@@ -17,19 +17,24 @@ namespace QuestSystem.EditorTools
     {
         #region Inspector Fields
 
-        /** <summary>The quest open, by asset GUID; empty for the web.</summary> */
+        [Tooltip("The quest open, by asset GUID; empty for the web.")]
         [SerializeField] private string questGuid = "";
+
+        [Tooltip("Where Back goes, most recent last, by asset GUID; empty entries are the web.")]
         [SerializeField] private List<string> back = new List<string>();
+
+        [Tooltip("Where Forward goes, most recent last, by asset GUID; empty entries are the web.")]
         [SerializeField] private List<string> forward = new List<string>();
+
+        [Tooltip("The canvas's pan when the window was last reloaded.")]
         [SerializeField] private Vector2 pan;
+
+        [Tooltip("The canvas's zoom when the window was last reloaded.")]
         [SerializeField] private float zoom = 1f;
 
         #endregion
 
         #region Private Fields
-
-        /** <summary>How often the window checks whether the editor skin changed, so its colours follow.</summary> */
-        private const long SkinCheckMilliseconds = 500;
 
         private QuestIndex _index;
         private WebScreen _webScreen;
@@ -38,7 +43,7 @@ namespace QuestSystem.EditorTools
         private ToolbarButton _back;
         private ToolbarButton _forward;
         private ToolbarBreadcrumbs _crumbs;
-        private VisualElement _questTools;
+        private ToolbarButton _questTools;
         private Label _status;
 
         #endregion
@@ -57,13 +62,6 @@ namespace QuestSystem.EditorTools
             var root = rootVisualElement;
             QuestGraphStyles.Apply(root);
             root.AddToClassList("quest-graph");
-            var proSkin = EditorGUIUtility.isProSkin;
-            root.schedule.Execute(() =>
-            {
-                if (proSkin == EditorGUIUtility.isProSkin) return;
-                proSkin = EditorGUIUtility.isProSkin;
-                QuestGraphStyles.Apply(root);
-            }).Every(SkinCheckMilliseconds);
 
             var toolbar = new Toolbar();
             _back = new ToolbarButton(Back) { text = "◀", tooltip = "Back" };
@@ -72,11 +70,9 @@ namespace QuestSystem.EditorTools
             toolbar.Add(_back);
             toolbar.Add(_forward);
             toolbar.Add(_crumbs);
-            _questTools = new VisualElement { style = { flexDirection = FlexDirection.Row } };
-            _questTools.Add(new ToolbarSpacer());
-            _questTools.Add(new ToolbarButton(() => _questScreen.AddStep()) { text = "+ Step", tooltip = "Add a step" });
-            toolbar.Add(_questTools);
             toolbar.Add(new ToolbarSpacer { flex = true });
+            _questTools = new ToolbarButton(() => _questScreen.AddStep()) { text = "+ Step", tooltip = "Add a step after the selected step, or where the pointer last was" };
+            toolbar.Add(_questTools);
             toolbar.Add(new ToolbarButton(Tidy) { text = "Tidy", tooltip = "Lay out again; pinned quests stay" });
             toolbar.Add(new ToolbarButton(Frame) { text = "Frame", tooltip = "Frame everything (A); F frames the selection" });
             toolbar.Add(new ToolbarButton(Validate) { text = "Validate", tooltip = "Check every quest" });
@@ -112,6 +108,17 @@ namespace QuestSystem.EditorTools
             if (_index != null) _index.OnChanged -= HandleIndexChanged;
         }
 
+        private void OnFocus()
+        {
+            if (rootVisualElement != null) QuestGraphStyles.Apply(rootVisualElement);
+        }
+
+        private void OnLostFocus()
+        {
+            _questScreen?.HideNotice();
+            _webScreen?.HideNotice();
+        }
+
         #endregion
 
         #region Public API
@@ -121,11 +128,10 @@ namespace QuestSystem.EditorTools
         public static void OpenWindow() => GetWindow<QuestGraphWindow>("Quest Graph");
 
         /** <summary>Opens the window on a quest.</summary> */
-        public static void Open(QuestDefinition quest)
-        {
-            var window = GetWindow<QuestGraphWindow>("Quest Graph");
-            window.Navigate(GuidOf(quest));
-        }
+        public static void Open(QuestDefinition quest) => GetWindow<QuestGraphWindow>("Quest Graph").ShowQuest(quest);
+
+        /** <summary>Goes to a quest's own screen, or to the web with none, keeping where it was for Back.</summary> */
+        public void ShowQuest(QuestDefinition quest) => Navigate(GuidOf(quest));
 
         #endregion
 
@@ -140,7 +146,14 @@ namespace QuestSystem.EditorTools
             return true;
         }
 
-        private void HandleIndexChanged(QuestDefinition quest) => _list?.Rebuild();
+        /** <summary>Keeps the list current, and leaves for the web when the quest open is deleted.</summary> */
+        private void HandleIndexChanged(QuestDefinition quest)
+        {
+            _list?.RequestRebuild();
+            if (_questScreen == null || string.IsNullOrEmpty(questGuid) || QuestOf(questGuid) != null) return;
+            questGuid = "";
+            ShowCurrent(null);
+        }
 
         private void RememberView(CanvasView view)
         {
@@ -216,7 +229,7 @@ namespace QuestSystem.EditorTools
             _crumbs.PushItem("Quests", () => Navigate(""));
             if (OnWeb) return;
             var quest = QuestOf(questGuid);
-            _crumbs.PushItem(quest.Kind == null ? "No kind" : quest.Kind.name);
+            _crumbs.PushItem(QuestStates.NameOf(quest.Kind));
             _crumbs.PushItem(QuestStates.TitleOf(quest));
         }
 
@@ -225,15 +238,16 @@ namespace QuestSystem.EditorTools
             if (_status == null) return;
             if (OnWeb)
             {
-                var (shown, total, links, errors, warnings, unreadable) = _webScreen.Counts;
-                _status.text = Join(shown == total ? $"{total} quests" : $"{shown} of {total} quests", $"{links} links", Count(errors, "error"), Count(warnings, "warning"),
-                    unreadable > 0 ? $"{unreadable} condition{(unreadable == 1 ? "" : "s")} not shown" : null);
+                var web = _webScreen.Counts;
+                _status.text = Join(web.Shown == web.Total ? Count(web.Total, "quest") : $"{web.Shown} of {Count(web.Total, "quest")}", Count(web.Links, "link"),
+                    Count(web.Errors, "error"), Count(web.Warnings, "warning"), web.Unreadable > 0 ? $"{Count(web.Unreadable, "condition")} not shown" : null);
                 return;
             }
-            var (steps, objectives, stepErrors, stepWarnings) = _questScreen.Counts;
-            _status.text = Join($"{steps} steps", $"{objectives} objectives", Count(stepErrors, "error"), Count(stepWarnings, "warning"));
+            var counts = _questScreen.Counts;
+            _status.text = Join(Count(counts.Steps, "step"), Count(counts.Objectives, "objective"), Count(counts.Errors, "error"), Count(counts.Warnings, "warning"));
         }
 
+        /** <summary>A count with its noun, plural when not one; null for none, so it is left out.</summary> */
         private static string Count(int count, string noun) => count > 0 ? $"{count} {noun}{(count == 1 ? "" : "s")}" : null;
 
         private static string Join(params string[] parts) => string.Join("  ·  ", parts.Where(part => part != null));
@@ -253,8 +267,9 @@ namespace QuestSystem.EditorTools
         /** <summary>Checks every quest again and shows the totals.</summary> */
         private void Validate()
         {
-            foreach (var quest in _index.Quests.ToList())
-                _index.Refresh(quest);
+            using (_index.Batch())
+                foreach (var quest in _index.Quests.ToList())
+                    _index.Refresh(quest);
             _list.Rebuild();
             if (OnWeb) _webScreen.Rebuild();
             else _questScreen.Rebuild();

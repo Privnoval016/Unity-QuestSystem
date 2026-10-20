@@ -1,3 +1,5 @@
+using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine.UIElements;
 
@@ -7,6 +9,9 @@ namespace QuestSystem.EditorTools
     public static class QuestGraphStyles
     {
         #region Private Fields
+
+        /** <summary>The stylesheet's file name, matched exactly so a similarly named sheet is never picked.</summary> */
+        private const string SheetName = "QuestGraph";
 
         private static StyleSheet _sheet;
 
@@ -19,8 +24,9 @@ namespace QuestSystem.EditorTools
         {
             if (_sheet == null)
             {
-                var guids = AssetDatabase.FindAssets("QuestGraph t:StyleSheet");
-                if (guids.Length > 0) _sheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(AssetDatabase.GUIDToAssetPath(guids[0]));
+                var path = AssetDatabase.FindAssets($"{SheetName} t:StyleSheet").Select(AssetDatabase.GUIDToAssetPath)
+                    .FirstOrDefault(candidate => Path.GetFileNameWithoutExtension(candidate) == SheetName);
+                if (path != null) _sheet = AssetDatabase.LoadAssetAtPath<StyleSheet>(path);
             }
             if (_sheet != null && !root.styleSheets.Contains(_sheet)) root.styleSheets.Add(_sheet);
             root.EnableInClassList("quest-graph--dark", EditorGUIUtility.isProSkin);

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -101,7 +102,7 @@ namespace QuestSystem.Tests
         {
             var trigger = Make<QuestTrigger>("Gate");
             trigger.Configure(_runtime, _kit.Signal("Reached"));
-            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("no running quest service"));
+            LogAssert.Expect(LogType.Warning, new Regex("no running quest service"));
             Call(trigger, "OnTriggerEnter", Make<BoxCollider>("Player"));
         }
 

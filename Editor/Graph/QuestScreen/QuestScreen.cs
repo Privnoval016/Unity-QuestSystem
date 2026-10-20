@@ -9,7 +9,7 @@ namespace QuestSystem.EditorTools
 {
     /**
      * <summary>The single-quest edit screen: a summary bar, the quest's steps as nodes wired by what they follow, and
-     * stubs for other quests that read its steps. Every change goes through <see cref="GraphEdits" />, one Undo step
+     * stubs for other quests linked to its steps. Every change goes through <see cref="StepEdits" />, one Undo step
      * each; step details are edited in the Inspector.</summary>
      */
     public sealed class QuestScreen : VisualElement
@@ -23,26 +23,31 @@ namespace QuestSystem.EditorTools
 
         /** <summary>Space kept between framed content and the canvas's edges and summary bar.</summary> */
         private const float FrameMargin = 24f;
-        private const int MaxStubsPerStep = 3;
-        private const float StubGap = 40f;
-        private const float StubHeight = 24f;
+
+        /** <summary>How far a pasted copy of the selection lands from the original.</summary> */
+        private static readonly Vector2 DuplicateOffset = new Vector2(30f, 30f);
+
         private static readonly string[] Commands = { "Copy", "Paste", "Duplicate", "Delete", "SoftDelete", "FrameSelected", "FrameSelectedWithLock", "SelectAll" };
 
         private readonly QuestIndex _index;
         private readonly GraphCanvas _canvas = new GraphCanvas();
-        private readonly VisualElement _summary = new VisualElement();
+        private readonly QuestSummaryBar _summary = new QuestSummaryBar();
+        private readonly StepStubs _stubs = new StepStubs();
         private readonly Notice _notice = new Notice();
+        private readonly DeferredRebuild _rebuild;
+        private readonly NodeDrag<string> _drag = new NodeDrag<string>();
+
+        /** <summary>Keyed by step id, resolving to its node.</summary> */
         private readonly Dictionary<string, StepNodeView> _nodes = new Dictionary<string, StepNodeView>();
+
+        /** <summary>Keyed by wire, resolving to the steps it links.</summary> */
         private readonly Dictionary<Wire, (string from, string to)> _links = new Dictionary<Wire, (string from, string to)>();
-        private readonly List<(Wire wire, VisualElement stub, StepNodeView node, bool into)> _stubWires = new List<(Wire, VisualElement, StepNodeView, bool)>();
         private readonly HashSet<string> _selected = new HashSet<string>();
         private QuestDefinition _quest;
-        private Wire _selectedWire;
+        private string _selectedWire;
         private Vector2 _pointer;
-        private Dictionary<string, Vector2> _dragFrom;
-        private Vector2 _dragStart;
-        private bool _dragged;
         private StepNodeView _linkFrom;
+        private Vector2 _linkPress;
         private Wire _preview;
         private bool _frameOnLayout;
 
@@ -57,7 +62,7 @@ namespace QuestSystem.EditorTools
         public GraphCanvas Canvas => _canvas;
 
         /** <summary>How many steps and objectives are shown, and how many problems, for the status bar.</summary> */
-        public (int steps, int objectives, int errors, int warnings) Counts { get; private set; }
+        public QuestCounts Counts { get; private set; }
 
         /** <summary>Raised when another quest should open.</summary> */
         public event Action<QuestDefinition> OnOpenQuest = delegate { };
@@ -73,64 +78,67 @@ namespace QuestSystem.EditorTools
         public QuestScreen(QuestIndex index)
         {
             _index = index;
+            _rebuild = new DeferredRebuild(this, Rebuild);
             AddToClassList("quest-graph__screen");
-            _summary.AddToClassList("quest-graph__summary");
-            _summary.RegisterCallback<ClickEvent>(evt =>
-            {
-                if (evt.target is Button || _quest == null) return;
-                Select(Array.Empty<string>());
-            });
             Add(_canvas);
             Add(_summary);
             Add(_notice);
+            _summary.OnOpenQuest += quest => OnOpenQuest(quest);
+            _summary.OnClicked += () => Select(Array.Empty<string>());
+            _stubs.OnOpenQuest += quest => OnOpenQuest(quest);
 
             _canvas.OnBackgroundClicked += HandleBackgroundClicked;
             _canvas.OnMarquee += HandleMarquee;
+            _canvas.RegisterCallback<PointerDownEvent>(_ => _notice.Hide(), TrickleDown.TrickleDown);
             _canvas.RegisterCallback<PointerMoveEvent>(evt => _pointer = _canvas.ToContent(_canvas.WorldToLocal(evt.position)), TrickleDown.TrickleDown);
             _canvas.RegisterCallback<ValidateCommandEvent>(HandleValidateCommand);
             _canvas.RegisterCallback<ExecuteCommandEvent>(HandleExecuteCommand);
             _canvas.RegisterCallback<KeyDownEvent>(HandleKeyDown);
             _canvas.RegisterCallback<GeometryChangedEvent>(_ => FrameIfWaiting());
+            _summary.RegisterCallback<GeometryChangedEvent>(_ => FrameIfWaiting());
             _canvas.AddManipulator(new ContextualMenuManipulator(BuildMenu));
             RegisterCallback<AttachToPanelEvent>(_ =>
             {
-                Undo.undoRedoPerformed += Rebuild;
+                Undo.undoRedoPerformed += _rebuild.Request;
                 _index.OnChanged += HandleIndexChanged;
             });
             RegisterCallback<DetachFromPanelEvent>(_ =>
             {
-                Undo.undoRedoPerformed -= Rebuild;
+                Undo.undoRedoPerformed -= _rebuild.Request;
                 _index.OnChanged -= HandleIndexChanged;
             });
         }
 
-        /** <summary>Shows a quest, framed to fit.</summary> */
+        /** <summary>Shows a quest at a view, or framed to fit without one. Anything half done is dropped.</summary> */
         public void Show(QuestDefinition quest, CanvasView? view = null)
         {
             _quest = quest;
             _selected.Clear();
             _selectedWire = null;
+            _drag.End();
+            _linkFrom = null;
+            _preview = null;
             _notice.Hide();
+            _frameOnLayout = !view.HasValue;
             Rebuild();
             if (view.HasValue) _canvas.SetView(view.Value);
-            else
-            {
-                _frameOnLayout = true;
-                FrameIfWaiting();
-            }
+            else FrameIfWaiting();
         }
 
-        /** <summary>Redraws everything from the quest, keeping the view and the selection.</summary> */
+        /** <summary>Redraws on the next update, once however often it is asked.</summary> */
+        public void RequestRebuild() => _rebuild.Request();
+
+        /** <summary>Redraws everything from the quest now, keeping the view and the selection.</summary> */
         public void Rebuild()
         {
+            _rebuild.Cancel();
             _canvas.Nodes.Clear();
             _canvas.Labels.Clear();
             _nodes.Clear();
             _links.Clear();
-            _stubWires.Clear();
-            _summary.Clear();
             if (_quest == null)
             {
+                _summary.Show(null, null, null);
                 _canvas.Wires.SetWires(Array.Empty<Wire>());
                 Counts = default;
                 OnRebuilt();
@@ -138,9 +146,9 @@ namespace QuestSystem.EditorTools
             }
 
             var summary = _index.SummaryOf(_quest) ?? QuestSummary.Of(_quest);
-            var issues = QuestValidator.Validate(_quest);
-            BuildSummary(summary, issues);
-            var cards = StepCard.Of(_quest, issues);
+            var readers = _index.ReadersOf(_quest);
+            _summary.Show(_quest, summary, readers);
+            var cards = StepCard.Of(_quest, summary.Issues);
             foreach (var card in cards)
             {
                 var node = new StepNodeView(card);
@@ -152,52 +160,45 @@ namespace QuestSystem.EditorTools
             }
             _selected.IntersectWith(_nodes.Keys);
             PlaceNodes();
-            BuildStubs(summary);
+            _stubs.Build(_canvas.Nodes, _quest, summary, readers, _nodes);
             RebuildWires();
-            Counts = (cards.Count, cards.Sum(card => card.Objectives.Count), issues.Count(i => i.Level == QuestIssueLevel.Error), issues.Count(i => i.Level == QuestIssueLevel.Warning));
+            Counts = new QuestCounts(cards.Count, cards.Sum(card => card.Objectives.Count), summary.Errors, summary.Warnings);
             _canvas.schedule.Execute(_canvas.Cull);
             OnRebuilt();
         }
 
         /**
-         * <summary>Frames the selected steps, or everything (stubs included) when none is selected: below the summary
-         * bar, centred across when it fits, otherwise from the left. A quest opening never goes below 80%.</summary>
+         * <summary>Frames the selected steps, or everything (stubs included) when none is selected, below the summary
+         * bar. A quest opening never goes below 80%.</summary>
          */
         public void Frame(bool selectionOnly = true, bool opening = false)
         {
             if (!_canvas.HasSize) return;
-            var elements = selectionOnly && _selected.Count > 0
-                ? _selected.Select(id => (VisualElement)_nodes[id]).ToList()
-                : _canvas.Nodes.Children().ToList();
-            if (elements.Count == 0) return;
-            var bounds = elements.Select(ElementRect).Aggregate((a, b) => Rect.MinMaxRect(Mathf.Min(a.xMin, b.xMin), Mathf.Min(a.yMin, b.yMin), Mathf.Max(a.xMax, b.xMax), Mathf.Max(a.yMax, b.yMax)));
-            var top = _summary.layout.yMax + FrameMargin;
-            var area = new Vector2(_canvas.layout.width - FrameMargin * 2f, _canvas.layout.height - top - FrameMargin);
-            var fit = Mathf.Min(area.x / bounds.width, area.y / bounds.height);
-            var zoom = Mathf.Clamp(fit, opening ? OpeningZoom : CanvasView.MinZoom, 1f);
-            var width = bounds.width * zoom;
-            var x = width <= area.x ? FrameMargin + (area.x - width) / 2f : FrameMargin;
-            _canvas.SetView(new CanvasView(new Vector2(x - bounds.xMin * zoom, top - bounds.yMin * zoom), zoom));
+            var rects = selectionOnly && _selected.Count > 0
+                ? _selected.Select(id => NodeRect(_nodes[id])).ToList()
+                : _nodes.Values.Select(NodeRect).Concat(_stubs.Rects).ToList();
+            if (rects.Count == 0) return;
+            _canvas.SetView(CanvasView.FramingBelow(CanvasView.Union(rects), _canvas.layout.size, _summary.layout.yMax + FrameMargin, FrameMargin, opening ? OpeningZoom : CanvasView.MinZoom));
         }
 
         /** <summary>Lays the steps out again and saves where they went, as one Undo step.</summary> */
         public void Tidy()
         {
             if (_quest == null) return;
-            GraphEdits.MoveSteps(_quest, StepLayout.Arrange(_quest, HeightOf));
-            Rebuild();
+            StepEdits.MoveSteps(_quest, StepLayout.Arrange(_quest, HeightOf));
+            AfterEdit();
         }
 
-        /** <summary>Adds a step where the pointer last was, or after the selected step.</summary> */
+        /** <summary>Adds a step after the selected step, or where the pointer last was.</summary> */
         public void AddStep()
         {
             if (_quest == null) return;
             var after = _selected.Count == 1 ? _selected.First() : null;
-            var at = after != null ? _nodes[after].Position + new Vector2(StepLayout.ColumnWidth, 0f) : _pointer;
-            var step = GraphEdits.AddStep(_quest, at, after);
-            Select(new[] { step.Id });
-            Rebuild();
+            AddStep(after != null ? _nodes[after].Position + new Vector2(StepLayout.ColumnWidth, 0f) : _pointer, after);
         }
+
+        /** <summary>Hides the notice, as when the user turns to something else.</summary> */
+        public void HideNotice() => _notice.Hide();
 
         #endregion
 
@@ -205,18 +206,14 @@ namespace QuestSystem.EditorTools
 
         private void HandleIndexChanged(QuestDefinition quest)
         {
-            if (_quest == null || (quest != _quest && _index.ReadersOf(_quest).All(link => link.Reader != quest))) return;
-            schedule.Execute(Rebuild);
+            if (_quest != null) _rebuild.Request();
         }
 
         private void HandleBackgroundClicked(Vector2 point, bool additive)
         {
-            _selectedWire = _canvas.Wires.WireAt(point, WireHitDistance / _canvas.View.Zoom);
-            if (_selectedWire != null && !_links.ContainsKey(_selectedWire)) _selectedWire = null;
-            foreach (var wire in _canvas.Wires.Wires)
-                wire.Selected = wire == _selectedWire;
-            _canvas.Wires.Redraw();
+            var wire = _canvas.Wires.WireAt(point, WireHitDistance / _canvas.View.Zoom);
             if (!additive) Select(Array.Empty<string>());
+            SelectWire(wire != null && _links.ContainsKey(wire) ? wire.Key : null);
         }
 
         private void HandleMarquee(Rect box, bool additive)
@@ -275,94 +272,16 @@ namespace QuestSystem.EditorTools
 
         #endregion
 
-        #region Helpers: Building
+        #region Helpers
 
-        private void BuildSummary(QuestSummary summary, IReadOnlyList<QuestIssue> issues)
+        /** <summary>Reads the quest again after a change made here, then redraws.</summary> */
+        private void AfterEdit()
         {
-            var title = new Label(QuestStates.TitleOf(_quest));
-            title.AddToClassList("quest-graph__summary-title");
-            _summary.Add(title);
-            AddField("Kind", _quest.Kind == null ? "none" : _quest.Kind.name);
-            if (_quest.Giver != null) AddField("Giver", _quest.Giver.DisplayName);
-            if (_quest.Place != null) AddField("Place", _quest.Place.DisplayName);
-            AddRefs("Needs", summary.Reads.Where(link => link.Slot == LinkSlot.Available && link.Read != _quest).Select(link => (link.Read, link.ReadStepId == null ? link.StateName : "step " + link.StateName)));
-            AddRefs("Fails if", summary.Reads.Where(link => link.Slot == LinkSlot.Fails && link.Read != _quest).Select(link => (link.Read, link.StateName)));
-            AddRefs("Read by", _index.ReadersOf(_quest).Where(link => link.Reader != _quest && link.ReadStepId == null).Select(link => (link.Reader, link.Label)));
-            if (_quest.Rewards.Count > 0) AddField("Rewards", string.Join(" · ", _quest.Rewards.Where(reward => reward != null).Select(reward => reward.Describe().Text)));
-            if (_quest.GivenAutomatically) AddPill("Auto-given");
-            if (_quest.Repeatable) AddPill("Repeatable");
-            if (summary.Unreadable > 0)
-            {
-                var hidden = new Label($"{summary.Unreadable} not shown") { tooltip = "Conditions that can't say what they read; links through them aren't drawn" };
-                hidden.AddToClassList("quest-graph__summary-note");
-                _summary.Add(hidden);
-            }
-            var spacer = new VisualElement();
-            spacer.AddToClassList("quest-graph__spacer");
-            _summary.Add(spacer);
-            var errors = issues.Count(issue => issue.Level == QuestIssueLevel.Error);
-            var warnings = issues.Count - errors;
-            var questIssues = string.Join("\n", issues.Where(issue => issue.StepId == null).Select(issue => issue.Problem));
-            if (errors > 0) _summary.Add(WithTip(QuestList.Badge(errors, "error"), questIssues));
-            if (warnings > 0) _summary.Add(WithTip(QuestList.Badge(warnings, "warning"), questIssues));
+            _index.Refresh(_quest);
+            Rebuild();
         }
 
-        private static Label WithTip(Label label, string tip)
-        {
-            label.tooltip = tip;
-            return label;
-        }
-
-        private void AddField(string name, string value)
-        {
-            var field = new VisualElement();
-            field.AddToClassList("quest-graph__field");
-            var label = new Label(name);
-            label.AddToClassList("quest-graph__field-name");
-            field.Add(label);
-            field.Add(new Label(value) { tooltip = value });
-            _summary.Add(field);
-        }
-
-        private void AddPill(string text)
-        {
-            var pill = new Label(text);
-            pill.AddToClassList("quest-graph__pill");
-            pill.AddToClassList("quest-graph__pill--plain");
-            _summary.Add(pill);
-        }
-
-        private void AddRefs(string name, IEnumerable<(QuestDefinition quest, string note)> refs)
-        {
-            var distinct = refs.Where(r => r.quest != null).GroupBy(r => r.quest).Select(group => group.First()).ToList();
-            if (distinct.Count == 0) return;
-            var field = new VisualElement();
-            field.AddToClassList("quest-graph__field");
-            var label = new Label(name);
-            label.AddToClassList("quest-graph__field-name");
-            field.Add(label);
-            foreach (var (quest, note) in distinct)
-                field.Add(RefButton(quest, note));
-            _summary.Add(field);
-        }
-
-        private Button RefButton(QuestDefinition quest, string note)
-        {
-            var button = new Button(() => OnOpenQuest(quest)) { tooltip = $"Open {QuestStates.TitleOf(quest)}" };
-            button.AddToClassList("quest-graph__ref");
-            var swatch = new VisualElement();
-            swatch.AddToClassList("quest-graph__swatch");
-            button.Add(swatch);
-            button.Add(new Label(QuestStates.TitleOf(quest)));
-            if (!string.IsNullOrEmpty(note))
-            {
-                var detail = new Label(note);
-                detail.AddToClassList("quest-graph__ref-note");
-                button.Add(detail);
-            }
-            return button;
-        }
-
+        /** <summary>Puts each step where it was saved, or where the automatic layout puts it in a quest never arranged.</summary> */
         private void PlaceNodes()
         {
             var arranged = StepLayout.NeedsLayout(_quest) ? StepLayout.Arrange(_quest, EstimatedHeight) : null;
@@ -373,53 +292,20 @@ namespace QuestSystem.EditorTools
             }
         }
 
+        /** <summary>Where every step is drawn now, for edits to save in a quest never arranged; null once it has been.</summary> */
+        private Dictionary<string, Vector2> Arrangement() => _quest.GraphArranged ? null : Positions();
+
+        private Dictionary<string, Vector2> Positions() => _nodes.ToDictionary(pair => pair.Key, pair => pair.Value.Position);
+
+        /** <summary>A step's height before it has been measured, from what it shows.</summary> */
         private float EstimatedHeight(string stepId)
         {
             var step = _quest.FindStep(stepId);
             var rules = (step.UnlockWhen != null ? 1 : 0) + (step.FailWhen != null ? 1 : 0);
-            return 36f + 22f + step.Objectives.Count * 34f + rules * 18f;
+            return StepNodeView.EstimatedHeight(step.Objectives.Count, rules);
         }
 
-        private float HeightOf(string stepId) => _nodes.TryGetValue(stepId, out var node) && node.layout.height > 0f ? node.layout.height : EstimatedHeight(stepId);
-
-        private void BuildStubs(QuestSummary summary)
-        {
-            var readers = _index.ReadersOf(_quest).Where(link => link.Reader != _quest && link.ReadStepId != null && _nodes.ContainsKey(link.ReadStepId))
-                .GroupBy(link => link.ReadStepId);
-            foreach (var group in readers)
-                AddStubs(_nodes[group.Key], group.GroupBy(link => link.Reader).Select(g => g.First()).Select(link => (link.Reader, link.Label)).ToList(), false);
-            var reads = summary.Reads.Where(link => link.ReaderStepId != null && link.Read != _quest && _nodes.ContainsKey(link.ReaderStepId)).GroupBy(link => link.ReaderStepId);
-            foreach (var group in reads)
-                AddStubs(_nodes[group.Key], group.GroupBy(link => link.Read).Select(g => g.First()).Select(link => (link.Read, link.Label)).ToList(), true);
-        }
-
-        private void AddStubs(StepNodeView node, List<(QuestDefinition quest, string note)> quests, bool into)
-        {
-            for (var i = 0; i < quests.Count && i <= MaxStubsPerStep; i++)
-            {
-                var more = i == MaxStubsPerStep;
-                var (quest, note) = quests[i];
-                var stub = new VisualElement { tooltip = more ? string.Join("\n", quests.Skip(MaxStubsPerStep).Select(q => QuestStates.TitleOf(q.quest))) : $"Open {QuestStates.TitleOf(quest)}" };
-                stub.AddToClassList("quest-graph__stub");
-                if (more) stub.Add(new Label($"+{quests.Count - MaxStubsPerStep} more"));
-                else
-                {
-                    stub.Add(new Label(QuestStates.TitleOf(quest)));
-                    var detail = new Label(note);
-                    detail.AddToClassList("quest-graph__ref-note");
-                    stub.Add(detail);
-                    stub.RegisterCallback<ClickEvent>(_ => OnOpenQuest(quest));
-                }
-                var y = node.Position.y + i * (StubHeight + 4f);
-                stub.style.top = y;
-                if (into) stub.style.left = node.Position.x - StubGap - 220f;
-                else stub.style.left = node.Position.x + StepNodeView.Width + StubGap;
-                _canvas.Nodes.Add(stub);
-                var wire = new Wire { Style = WireStyle.Normal, Dashed = true, Arrow = true };
-                _stubWires.Add((wire, stub, node, into));
-                stub.RegisterCallback<GeometryChangedEvent>(_ => PlaceStubWires());
-            }
-        }
+        private float HeightOf(string stepId) => _nodes.TryGetValue(stepId, out var node) && CanvasView.HasSize(node.layout.size) ? node.layout.height : EstimatedHeight(stepId);
 
         private void RebuildWires()
         {
@@ -427,9 +313,8 @@ namespace QuestSystem.EditorTools
             var record = new QuestRecord(_quest);
             foreach (var step in record.Steps)
             {
-                if (!_nodes.TryGetValue(step.Definition.Id, out var to)) continue;
                 var definition = step.Definition;
-                if (definition.Start == StepStart.AfterStepAbove && definition.UnlockWhen != null) continue;
+                if (!_nodes.TryGetValue(definition.Id, out var to) || (definition.Start == StepStart.AfterStepAbove && definition.UnlockWhen != null)) continue;
                 foreach (var before in step.Follows)
                 {
                     if (!_nodes.TryGetValue(before.Definition.Id, out var from)) continue;
@@ -442,18 +327,18 @@ namespace QuestSystem.EditorTools
                         Style = ghost ? WireStyle.Ghost : definition.AfterRule == StepJoin.Any ? WireStyle.Any : WireStyle.Normal,
                         Dashed = ghost,
                     };
-                    wire.Selected = _selectedWire != null && _selectedWire.Key == wire.Key;
-                    if (wire.Selected) _selectedWire = wire;
+                    wire.Selected = wire.Key == _selectedWire;
                     _links[wire] = (before.Definition.Id, definition.Id);
                     wires.Add(wire);
                 }
             }
-            wires.AddRange(_stubWires.Select(stub => stub.wire));
+            if (_selectedWire != null && !wires.Any(wire => wire.Selected)) _selectedWire = null;
+            wires.AddRange(_stubs.Wires);
             if (_preview != null) wires.Add(_preview);
             _canvas.Wires.SetWires(wires);
-            PlaceStubWires();
         }
 
+        /** <summary>Moves wires and stubs after nodes moved.</summary> */
         private void MoveWires()
         {
             foreach (var pair in _links)
@@ -461,38 +346,15 @@ namespace QuestSystem.EditorTools
                 pair.Key.From = _nodes[pair.Value.from].OutPoint;
                 pair.Key.To = _nodes[pair.Value.to].InPoint;
             }
-            PlaceStubWires();
-        }
-
-        private void PlaceStubWires()
-        {
-            foreach (var (wire, stub, node, into) in _stubWires)
-            {
-                var stubAt = new Vector2(stub.resolvedStyle.left, stub.resolvedStyle.top);
-                var mid = stubAt.y + Mathf.Max(stub.layout.height, StubHeight) / 2f;
-                if (into)
-                {
-                    wire.From = new Vector2(stubAt.x + stub.layout.width, mid);
-                    wire.To = node.InPoint;
-                }
-                else
-                {
-                    wire.From = node.OutPoint;
-                    wire.To = new Vector2(stubAt.x, mid);
-                }
-            }
+            _stubs.Place();
             _canvas.Wires.Redraw();
         }
-
-        #endregion
-
-        #region Helpers: Editing
 
         private void HookNode(StepNodeView node)
         {
             node.Header.RegisterCallback<PointerDownEvent>(evt =>
             {
-                if (evt.button != 0) return;
+                if (evt.button != (int)MouseButton.LeftMouse) return;
                 if (evt.shiftKey || evt.actionKey)
                 {
                     var next = new HashSet<string>(_selected);
@@ -500,43 +362,48 @@ namespace QuestSystem.EditorTools
                     Select(next.ToList());
                 }
                 else if (!_selected.Contains(node.StepId)) Select(new[] { node.StepId });
-                _dragFrom = _selected.ToDictionary(id => id, id => _nodes[id].Position);
-                _dragStart = evt.position;
-                _dragged = false;
+                else QuestGraphFocus.Focus(_quest, _selected.Count == 1 ? node.StepId : null);
+                _drag.Begin(_selected.Select(id => new KeyValuePair<string, Vector2>(id, _nodes[id].Position)), evt.position);
                 node.Header.CapturePointer(evt.pointerId);
                 _canvas.Focus();
                 evt.StopPropagation();
             });
             node.Header.RegisterCallback<PointerMoveEvent>(evt =>
             {
-                if (!node.Header.HasPointerCapture(evt.pointerId) || _dragFrom == null) return;
-                var delta = ((Vector2)evt.position - _dragStart) / _canvas.View.Zoom;
-                if (!_dragged && delta.sqrMagnitude < 9f) return;
-                _dragged = true;
-                foreach (var pair in _dragFrom)
-                    _nodes[pair.Key].Position = Snap(pair.Value + delta);
+                if (!node.Header.HasPointerCapture(evt.pointerId)) return;
+                var moved = _drag.Move(evt.position, _canvas.View.Zoom);
+                if (moved == null) return;
+                foreach (var pair in moved)
+                    _nodes[pair.Key].Position = pair.Value;
                 MoveWires();
             });
             node.Header.RegisterCallback<PointerUpEvent>(evt =>
             {
                 if (!node.Header.HasPointerCapture(evt.pointerId)) return;
+                var moved = _drag.End();
                 node.Header.ReleasePointer(evt.pointerId);
-                if (_dragged && _dragFrom != null) GraphEdits.MoveSteps(_quest, _dragFrom.Keys.ToDictionary(id => id, id => _nodes[id].Position));
-                _dragFrom = null;
-                _dragged = false;
+                if (!moved) return;
+                StepEdits.MoveSteps(_quest, Positions());
+                AfterEdit();
+            });
+            node.Header.RegisterCallback<PointerCaptureOutEvent>(_ =>
+            {
+                if (_drag.End()) Rebuild();
             });
             node.RegisterCallback<PointerDownEvent>(evt =>
             {
-                if (evt.button != 0 || node.Header.Contains(evt.target as VisualElement) || node.OutPort == evt.target) return;
+                if (evt.button != (int)MouseButton.LeftMouse || node.Header.Contains(evt.target as VisualElement) || node.OutPort == evt.target) return;
                 if (!_selected.Contains(node.StepId) || _selected.Count > 1) Select(new[] { node.StepId });
+                else QuestGraphFocus.Focus(_quest, node.StepId);
                 _canvas.Focus();
                 evt.StopPropagation();
             });
 
             node.OutPort.RegisterCallback<PointerDownEvent>(evt =>
             {
-                if (evt.button != 0) return;
+                if (evt.button != (int)MouseButton.LeftMouse) return;
                 _linkFrom = node;
+                _linkPress = evt.position;
                 _preview = new Wire { Style = WireStyle.Preview, From = node.OutPoint, To = node.OutPoint, Dashed = true };
                 RebuildWires();
                 node.OutPort.CapturePointer(evt.pointerId);
@@ -551,25 +418,35 @@ namespace QuestSystem.EditorTools
             node.OutPort.RegisterCallback<PointerUpEvent>(evt =>
             {
                 if (_preview == null || !node.OutPort.HasPointerCapture(evt.pointerId)) return;
-                node.OutPort.ReleasePointer(evt.pointerId);
-                var drop = _canvas.ToContent(_canvas.WorldToLocal(evt.position));
-                var target = _nodes.Values.FirstOrDefault(other => NodeRect(other).Contains(drop));
                 var from = _linkFrom;
-                _preview = null;
-                _linkFrom = null;
-                if (target == from) RebuildWires();
-                else if (target != null)
-                {
-                    if (!GraphEdits.Link(_quest, from.StepId, target.StepId)) _notice.Show("Those steps would wait on each other, so they weren't linked.", false);
-                    Rebuild();
-                }
-                else
-                {
-                    var step = GraphEdits.AddStep(_quest, drop - new Vector2(0f, StepNodeView.PortY), from.StepId);
-                    Select(new[] { step.Id });
-                    Rebuild();
-                }
+                var clicked = ((Vector2)evt.position - _linkPress).magnitude < GraphMetrics.ClickThreshold;
+                EndLinkDrag();
+                node.OutPort.ReleasePointer(evt.pointerId);
+                if (clicked) return;
+                var drop = _canvas.ToContent(_canvas.WorldToLocal(evt.position));
+                var target = _nodes.Values.FirstOrDefault(other => DropRect(other).Contains(drop));
+                if (target == from) return;
+                if (target == null) AddStep(drop - new Vector2(0f, StepNodeView.PortY), from.StepId);
+                else if (StepEdits.Link(_quest, from.StepId, target.StepId)) AfterEdit();
+                else _notice.Show("Those steps would wait on each other, so they weren't linked.", false);
             });
+            node.OutPort.RegisterCallback<PointerCaptureOutEvent>(_ => EndLinkDrag());
+        }
+
+        /** <summary>Drops a link being drawn, taking its preview wire away.</summary> */
+        private void EndLinkDrag()
+        {
+            if (_preview == null) return;
+            _preview = null;
+            _linkFrom = null;
+            RebuildWires();
+        }
+
+        private void AddStep(Vector2 at, string after)
+        {
+            var step = StepEdits.AddStep(_quest, at, after, Arrangement());
+            AfterEdit();
+            Select(new[] { step.Id });
         }
 
         private void Select(IReadOnlyCollection<string> ids)
@@ -578,26 +455,37 @@ namespace QuestSystem.EditorTools
             _selected.UnionWith(ids);
             foreach (var node in _nodes.Values)
                 node.SetSelected(_selected.Contains(node.StepId));
+            SelectWire(null);
             if (_quest != null) QuestGraphFocus.Focus(_quest, _selected.Count == 1 ? _selected.First() : null);
+        }
+
+        private void SelectWire(string key)
+        {
+            if (_selectedWire == key) return;
+            _selectedWire = key;
+            foreach (var wire in _links.Keys)
+                wire.Selected = wire.Key == key;
+            _canvas.Wires.Redraw();
         }
 
         private void DeleteSelection()
         {
-            if (_selectedWire != null && _links.TryGetValue(_selectedWire, out var link))
+            if (_selectedWire != null)
             {
-                GraphEdits.Unlink(_quest, link.from, link.to);
+                var link = _links.First(pair => pair.Key.Key == _selectedWire).Value;
+                StepEdits.Unlink(_quest, link.from, link.to);
                 _selectedWire = null;
-                Rebuild();
+                AfterEdit();
                 return;
             }
             if (_selected.Count == 0) return;
-            var result = GraphEdits.DeleteSteps(_quest, _selected.ToList(), _index);
             var count = _selected.Count;
+            var result = StepEdits.DeleteSteps(_quest, _selected.ToList(), _index);
             Select(Array.Empty<string>());
-            Rebuild();
+            AfterEdit();
             var message = count == 1 ? "Deleted a step." : $"Deleted {count} steps.";
             if (result.Rewired.Count > 0) message += $" {result.Rewired.Count} rewired to keep their order.";
-            var readers = result.Readers.GroupBy(r => r.Reader).Select(g => g.Key).ToList();
+            var readers = result.Readers.Select(link => link.Reader).Distinct().ToList();
             if (readers.Count > 0) message += " Still read by:";
             _notice.Show(message, true, readers.Select(reader => (QuestStates.TitleOf(reader), (Action)(() => OnOpenQuest(reader)))).ToArray());
         }
@@ -605,14 +493,14 @@ namespace QuestSystem.EditorTools
         private void Copy()
         {
             if (_selected.Count == 0) return;
-            EditorGUIUtility.systemCopyBuffer = GraphEdits.Copy(_quest, _selected.ToList());
+            EditorGUIUtility.systemCopyBuffer = StepEdits.Copy(_quest, _selected.ToList());
         }
 
         private void Paste(Vector2 at)
         {
-            var result = GraphEdits.Paste(_quest, EditorGUIUtility.systemCopyBuffer, at);
+            var result = StepEdits.Paste(_quest, EditorGUIUtility.systemCopyBuffer, at, Arrangement());
             if (result.StepIds.Count == 0) return;
-            Rebuild();
+            AfterEdit();
             Select(result.StepIds.ToList());
             if (result.DroppedLinks > 0) _notice.Show($"Pasted. {result.DroppedLinks} link{(result.DroppedLinks == 1 ? "" : "s")} to steps that weren't copied dropped.", true);
         }
@@ -622,7 +510,7 @@ namespace QuestSystem.EditorTools
             if (_selected.Count == 0) return;
             var origin = _selected.Select(id => _nodes[id].Position).Aggregate(Vector2.Min);
             Copy();
-            Paste(origin + new Vector2(30f, 30f));
+            Paste(origin + DuplicateOffset);
         }
 
         private void BuildMenu(ContextualMenuPopulateEvent evt)
@@ -630,13 +518,8 @@ namespace QuestSystem.EditorTools
             if (_quest == null) return;
             var at = _canvas.ToContent(_canvas.WorldToLocal(evt.mousePosition));
             var hasSelection = _selected.Count > 0;
-            evt.menu.AppendAction("Add Step", _ =>
-            {
-                var step = GraphEdits.AddStep(_quest, at);
-                Select(new[] { step.Id });
-                Rebuild();
-            });
-            evt.menu.AppendAction("Paste", _ => Paste(at), GraphEdits.CanPaste(EditorGUIUtility.systemCopyBuffer) ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
+            evt.menu.AppendAction("Add Step", _ => AddStep(at, null));
+            evt.menu.AppendAction("Paste", _ => Paste(at), StepEdits.CanPaste(EditorGUIUtility.systemCopyBuffer) ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
             evt.menu.AppendSeparator();
             evt.menu.AppendAction("Copy", _ => Copy(), hasSelection ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
             evt.menu.AppendAction("Duplicate", _ => Duplicate(), hasSelection ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled);
@@ -647,20 +530,24 @@ namespace QuestSystem.EditorTools
             evt.StopPropagation();
         }
 
+        /** <summary>Frames the quest once everything in it has been measured, if a frame is waiting.</summary> */
         private void FrameIfWaiting()
         {
             if (!_frameOnLayout || !_canvas.HasSize || _nodes.Count == 0 || !CanvasView.HasSize(_summary.layout.size)) return;
-            if (_canvas.Nodes.Children().Any(element => !CanvasView.HasSize(element.layout.size))) return;
+            if (_nodes.Values.Any(node => !CanvasView.HasSize(node.layout.size))) return;
             _frameOnLayout = false;
             _canvas.schedule.Execute(() => Frame(false, true));
         }
 
-        private static Rect NodeRect(StepNodeView node) => new Rect(node.Position, new Vector2(StepNodeView.Width, Mathf.Max(node.layout.height, 40f)));
+        private static Rect NodeRect(StepNodeView node) =>
+            new Rect(node.Position, new Vector2(StepNodeView.Width, CanvasView.HasSize(node.layout.size) ? node.layout.height : StepNodeView.MinHeight));
 
-        private static Rect ElementRect(VisualElement element) =>
-            new Rect(element.resolvedStyle.left, element.resolvedStyle.top, CanvasView.HasSize(element.layout.size) ? element.layout.width : StepNodeView.Width, CanvasView.HasSize(element.layout.size) ? element.layout.height : 40f);
-
-        private static Vector2 Snap(Vector2 position) => new Vector2(Mathf.Round(position.x / 10f) * 10f, Mathf.Round(position.y / 10f) * 10f);
+        /** <summary>Where a link dropped counts as on a node: the node with a little room around it.</summary> */
+        private static Rect DropRect(StepNodeView node)
+        {
+            var rect = NodeRect(node);
+            return new Rect(rect.x - GraphMetrics.DropReach, rect.y - GraphMetrics.DropReach, rect.width + GraphMetrics.DropReach * 2f, rect.height + GraphMetrics.DropReach * 2f);
+        }
 
         #endregion
     }

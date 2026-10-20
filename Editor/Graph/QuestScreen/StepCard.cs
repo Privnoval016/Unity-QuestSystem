@@ -22,6 +22,38 @@ namespace QuestSystem.EditorTools
         WithQuest,
     }
 
+    /** <summary>How a step pill reads: its text, its look, and what it means.</summary> */
+    public readonly struct StepTagLook
+    {
+        /** <summary>The pill's text.</summary> */
+        public string Text { get; }
+
+        /** <summary>The pill's style class.</summary> */
+        public string ClassName { get; }
+
+        /** <summary>What the pill means, for its tooltip.</summary> */
+        public string Meaning { get; }
+
+        /** <summary>Makes a look.</summary> */
+        public StepTagLook(string text, string className, string meaning)
+        {
+            Text = text;
+            ClassName = className;
+            Meaning = meaning;
+        }
+
+        /** <summary>How a tag reads on a step with this many objectives.</summary> */
+        public static StepTagLook Of(StepTag tag, int objectives) => tag switch
+        {
+            StepTag.AfterAny => new StepTagLook("After any", "quest-graph__pill--any", "Starts once any one linked step is done"),
+            StepTag.AnyOne => new StepTagLook($"Any 1 of {objectives}", "quest-graph__pill--any", "Any one objective completes it"),
+            StepTag.Ends => new StepTagLook("Ends", "quest-graph__pill--end", "Completing it completes the quest"),
+            StepTag.EndsByDefault => new StepTagLook("Ends", "quest-graph__pill--end-implicit", "Nothing follows it, so completing it completes the quest"),
+            StepTag.ShownEarly => new StepTagLook("Shown early", "quest-graph__pill--plain", "Players see it before it starts"),
+            _ => new StepTagLook("With quest", "quest-graph__pill--plain", "Starts as soon as the quest is given"),
+        };
+    }
+
     /** <summary>One objective as a node shows it.</summary> */
     public readonly struct ObjectiveLine
     {
@@ -102,6 +134,9 @@ namespace QuestSystem.EditorTools
             return record.Steps.Select(step => new StepCard(step, marked, issues)).ToList();
         }
 
+        /** <summary>The label of a step's fail rule.</summary> */
+        public const string FailsLabel = "Fails quest if";
+
         /** <summary>An objective's tracker in brief, with its target when more than one.</summary> */
         public static string TrackerText(QuestObjective objective)
         {
@@ -136,7 +171,7 @@ namespace QuestSystem.EditorTools
 
             var rules = new List<RuleLine>();
             if (step.UnlockWhen != null) rules.Add(new RuleLine(step.Start == StepStart.AfterStepAbove ? "Unlock if" : "And if", ConditionTree.Summarize(step.UnlockWhen)));
-            if (step.FailWhen != null) rules.Add(new RuleLine("Fails quest if", ConditionTree.Summarize(step.FailWhen)));
+            if (step.FailWhen != null) rules.Add(new RuleLine(FailsLabel, ConditionTree.Summarize(step.FailWhen)));
             Rules = rules;
 
             Problems = issues.Where(issue => issue.StepId == step.Id).OrderByDescending(issue => issue.Level).ToList();

@@ -15,6 +15,9 @@ namespace QuestSystem.EditorTools
     {
         #region Private Fields
 
+        /** <summary>The serialized name of the quest's step list.</summary> */
+        private const string StepsField = "steps";
+
 #if ODIN_INSPECTOR
         private PropertyTree _tree;
 #endif
@@ -48,8 +51,14 @@ namespace QuestSystem.EditorTools
             else
             {
                 _tree.BeginDraw(false);
-                _tree.GetPropertyAtUnityPath(path)?.Draw();
-                _tree.EndDraw();
+                try
+                {
+                    _tree.GetPropertyAtUnityPath(path)?.Draw();
+                }
+                finally
+                {
+                    _tree.EndDraw();
+                }
             }
 #else
             serializedObject.Update();
@@ -68,7 +77,7 @@ namespace QuestSystem.EditorTools
         {
             if (stepId == null) return null;
             for (var i = 0; i < quest.Steps.Count; i++)
-                if (quest.Steps[i] != null && quest.Steps[i].Id == stepId) return $"steps.Array.data[{i}]";
+                if (quest.Steps[i] != null && quest.Steps[i].Id == stepId) return $"{StepsField}.Array.data[{i}]";
             return null;
         }
 

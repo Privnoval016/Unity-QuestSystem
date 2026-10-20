@@ -1,10 +1,13 @@
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Extensions.Logic;
 using NUnit.Framework;
 using QuestSystem.EditorTools;
+using UnityEditor;
 using UnityEngine;
 using static QuestSystem.Tests.Build;
+using Debug = UnityEngine.Debug;
 
 namespace QuestSystem.Tests
 {
@@ -29,7 +32,7 @@ namespace QuestSystem.Tests
         {
             var kind = ScriptableObject.CreateInstance<QuestKind>();
             kind.name = name;
-            var serialized = new UnityEditor.SerializedObject(kind);
+            var serialized = new SerializedObject(kind);
             serialized.FindProperty("order").intValue = order;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             _made.Add(kind);
@@ -58,9 +61,50 @@ namespace QuestSystem.Tests
             Assert.That(links[0].From, Is.SameAs(a));
             Assert.That(links[0].To, Is.SameAs(b));
             Assert.That(links[0].Fails, Is.True);
-            Assert.That(links[0].Label, Does.StartWith("needs done · "));
+            Assert.That(links[0].Label, Is.EqualTo("needs done · +2"), "three ways of reading: the first, then how many more");
             Assert.That(WebLinks.ReadsItself(index, self));
             Assert.That(WebLinks.ReadsItself(index, a), Is.False);
+        }
+
+        [Test]
+        public void TwoWaysOfReading_AreBothNamed()
+        {
+            var a = _kit.Quest("A", new[] { Step("s") });
+            var b = _kit.Quest("B", new[] { Step("s") }, new QuestSettings { AvailableWhen = new QuestStateCondition(a), FailWhen = new QuestStateCondition(a, QuestState.Failed) });
+            Assert.That(WebLinks.Of(Index(a, b), new[] { a, b }).Single().Label, Is.EqualTo("needs done · fails if failed"));
+        }
+
+        [Test]
+        public void Filters_ShowByKindAndProperty_AndSearchTitlesStepTextAndIds()
+        {
+            var main = Kind("Main", 0);
+            var plain = _kit.Quest("Plain", new[] { Step("s") }, new QuestSettings { Title = "Find the map", Kind = main, HiddenUntilGiven = true });
+            var repeat = _kit.Quest("Repeat", new[] { Step("hunt", new StepSettings { Text = "Hunt wolves" }) }, new QuestSettings { Title = "Bounty", Repeatable = true, HiddenUntilGiven = false });
+            var index = Index(plain, repeat);
+            var filters = new WebFilters();
+            Assert.That(filters.IsEmpty && !filters.Searching);
+            Assert.That(filters.Shows(plain, index.SummaryOf(plain)) && filters.Shows(repeat, index.SummaryOf(repeat)));
+
+            filters.Kinds.Add(main);
+            Assert.That(filters.Shows(plain, null) && !filters.Shows(repeat, null), "a kind filter hides quests with no kind");
+            filters.Kinds.Clear();
+            filters.Repeatable = true;
+            Assert.That(!filters.Shows(plain, null) && filters.Shows(repeat, null));
+            filters.Repeatable = false;
+            filters.ShownEarly = true;
+            Assert.That(!filters.Shows(plain, null) && filters.Shows(repeat, null));
+            filters.ShownEarly = false;
+            filters.Problems = true;
+            Assert.That(filters.Shows(plain, null), Is.False, "a quest not read yet shows no problems");
+
+            filters.Search = " map ";
+            Assert.That(filters.Matches(plain) && !filters.Matches(repeat));
+            filters.Search = "WOLVES";
+            Assert.That(filters.Matches(repeat), "step text, ignoring case");
+            filters.Search = "hunt";
+            Assert.That(filters.Matches(repeat));
+            filters.Clear();
+            Assert.That(filters.IsEmpty && !filters.Searching && !filters.Matches(plain));
         }
 
         [Test]
@@ -120,7 +164,7 @@ namespace QuestSystem.Tests
                 quests.Add(_kit.Quest("Q" + i, new[] { Step("s", Count("x", _kit.Signal("S" + i))) },
                     new QuestSettings { Kind = kinds[i % 3], AvailableWhen = needs == null ? null : new QuestStateCondition(needs) }));
             }
-            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var watch = Stopwatch.StartNew();
             var index = Index(quests.ToArray());
             var indexed = watch.ElapsedMilliseconds;
             var links = WebLinks.Of(index, quests);

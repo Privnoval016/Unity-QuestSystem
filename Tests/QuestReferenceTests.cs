@@ -96,7 +96,7 @@ namespace QuestSystem.Tests
             new ConditionTracker(condition).CollectConditions(held);
             new SignalTracker(_kit.Signal("S"), condition).CollectConditions(held);
             new SignalTracker(_kit.Signal("S")).CollectConditions(held);
-            new FlagTracker(_kit.Flag("G")).CollectConditions(held);
+            Assert.That(Trackers.ConditionHolderOf(new FlagTracker(_kit.Flag("G"))), Is.Null, "a tracker that holds no conditions isn't a holder");
             Assert.That(held, Is.EqualTo(new[] { condition, condition }));
         }
 

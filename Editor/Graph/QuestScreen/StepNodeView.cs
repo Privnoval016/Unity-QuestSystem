@@ -7,6 +7,13 @@ namespace QuestSystem.EditorTools
     /** <summary>A step on the quest canvas: its title, pills, objectives and rules, with an input port on the left and an output on the right.</summary> */
     public sealed class StepNodeView : VisualElement
     {
+        #region Private Fields
+
+        /** <summary>Rough heights of a node's parts, for estimating a node before it is measured.</summary> */
+        private const float HeaderHeight = 36f, TagsHeight = 22f, ObjectiveHeight = 34f, RuleHeight = 18f;
+
+        #endregion
+
         #region Properties
 
         /** <summary>How wide every step node is.</summary> */
@@ -14,6 +21,9 @@ namespace QuestSystem.EditorTools
 
         /** <summary>How far down the node its ports sit.</summary> */
         public const float PortY = 15f;
+
+        /** <summary>The height of a node with nothing in it, used before a node is measured.</summary> */
+        public const float MinHeight = 40f;
 
         /** <summary>The step's id.</summary> */
         public string StepId { get; }
@@ -73,7 +83,7 @@ namespace QuestSystem.EditorTools
                 var tags = new VisualElement();
                 tags.AddToClassList("quest-graph__tags");
                 foreach (var tag in card.Tags)
-                    tags.Add(Pill(tag, card.Objectives.Count));
+                    tags.Add(Pill(StepTagLook.Of(tag, card.Objectives.Count)));
                 Add(tags);
             }
 
@@ -112,6 +122,7 @@ namespace QuestSystem.EditorTools
                 row.AddToClassList("quest-graph__rule");
                 var label = new Label(rule.Label);
                 label.AddToClassList("quest-graph__rule-label");
+                label.EnableInClassList("quest-graph__rule-label--fails", rule.Label == StepCard.FailsLabel);
                 row.Add(label);
                 var text = new Label(rule.Text) { tooltip = rule.Text };
                 text.AddToClassList("quest-graph__rule-text");
@@ -129,29 +140,24 @@ namespace QuestSystem.EditorTools
             OutPort.AddToClassList("quest-graph__port");
             OutPort.AddToClassList("quest-graph__port--out");
             Add(OutPort);
+            Add(SelectionRing.Make());
         }
 
+        /** <summary>How tall a node with these objectives and rules is likely to be, before it is measured.</summary> */
+        public static float EstimatedHeight(int objectives, int rules) => HeaderHeight + TagsHeight + objectives * ObjectiveHeight + rules * RuleHeight;
+
         /** <summary>Shows the node as selected or not.</summary> */
-        public void SetSelected(bool selected) => EnableInClassList("quest-graph__node--selected", selected);
+        public void SetSelected(bool selected) => EnableInClassList(SelectionRing.SelectedClass, selected);
 
         #endregion
 
         #region Helpers
 
-        private static Label Pill(StepTag tag, int objectives)
+        private static Label Pill(StepTagLook look)
         {
-            var (text, kind, tip) = tag switch
-            {
-                StepTag.AfterAny => ("After any", "any", "Starts once any one linked step is done"),
-                StepTag.AnyOne => ($"Any 1 of {objectives}", "any", "Any one objective completes it"),
-                StepTag.Ends => ("Ends", "end", "Completing it completes the quest"),
-                StepTag.EndsByDefault => ("Ends", "end-implicit", "Nothing follows it, so completing it completes the quest"),
-                StepTag.ShownEarly => ("Shown early", "plain", "Players see it before it starts"),
-                _ => ("With quest", "plain", "Starts as soon as the quest is given"),
-            };
-            var pill = new Label(text) { tooltip = tip };
+            var pill = new Label(look.Text) { tooltip = look.Meaning };
             pill.AddToClassList("quest-graph__pill");
-            pill.AddToClassList("quest-graph__pill--" + kind);
+            pill.AddToClassList(look.ClassName);
             return pill;
         }
 

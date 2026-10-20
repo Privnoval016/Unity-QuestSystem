@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -18,14 +19,14 @@ namespace QuestSystem.EditorTools
         /** <summary>Space between nodes in a column.</summary> */
         public const float RowGap = 30f;
 
-        /** <summary>True when no step has a position yet, so the quest has never been arranged.</summary> */
-        public static bool NeedsLayout(QuestDefinition quest) => quest.Steps.All(step => step == null || step.GraphPosition == Vector2.zero);
+        /** <summary>True when the quest has never been arranged, so its steps are laid out automatically.</summary> */
+        public static bool NeedsLayout(QuestDefinition quest) => !quest.GraphArranged;
 
         /**
          * <summary>A position for every step: a column for how many steps lead to it, and rows in the order of the steps
          * before them. Loops are cut, so this always finishes.</summary>
          */
-        public static Dictionary<string, Vector2> Arrange(QuestDefinition quest, System.Func<string, float> heightOf)
+        public static Dictionary<string, Vector2> Arrange(QuestDefinition quest, Func<string, float> heightOf)
         {
             var record = new QuestRecord(quest);
             var depth = new Dictionary<StepRecord, int>();

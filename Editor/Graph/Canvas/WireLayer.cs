@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -27,7 +28,7 @@ namespace QuestSystem.EditorTools
 
         private readonly List<Wire> _wires = new List<Wire>();
         private readonly List<Vector2> _points = new List<Vector2>();
-        private readonly Color[] _colors = { Color.grey, Color.cyan, Color.red, Color.yellow, Color.grey, Color.blue };
+        private readonly Color[] _colors = new Color[Enum.GetValues(typeof(WireStyle)).Length];
         private Color _select = Color.blue;
         private Rect _drawn;
         private Rect _visible;
@@ -82,7 +83,7 @@ namespace QuestSystem.EditorTools
             var bestDistance = within;
             foreach (var wire in _wires)
             {
-                if (!Inflate(WireCurve.Bounds(wire.From, wire.To), within).Contains(point)) continue;
+                if (wire.Hidden || !Inflate(WireCurve.Bounds(wire.From, wire.To), within).Contains(point)) continue;
                 var distance = WireCurve.Distance(wire.From, wire.To, point);
                 if (distance > bestDistance) continue;
                 bestDistance = distance;
@@ -118,7 +119,7 @@ namespace QuestSystem.EditorTools
             painter.lineCap = LineCap.Round;
             foreach (var wire in _wires)
             {
-                if (!WireCurve.Bounds(wire.From, wire.To).Overlaps(_drawn)) continue;
+                if (wire.Hidden || !WireCurve.Bounds(wire.From, wire.To).Overlaps(_drawn)) continue;
                 var color = wire.Selected ? _select : _colors[(int)wire.Style];
                 if (wire.Faded) color.a *= FadedAlpha;
                 painter.strokeColor = color;

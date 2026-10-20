@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace QuestSystem.EditorTools
@@ -19,6 +20,12 @@ namespace QuestSystem.EditorTools
 
         /** <summary>The smallest and largest zoom.</summary> */
         public const float MinZoom = 0.25f, MaxZoom = 2f;
+
+        /** <summary>Framing never zooms in past this, so a small graph stays at its true size.</summary> */
+        public const float MaxFitZoom = 1f;
+
+        /** <summary>No pan, at 100%.</summary> */
+        public static CanvasView Default => new CanvasView(Vector2.zero, 1f);
 
         /** <summary>Makes a view; zoom is kept within its limits, and a value that isn't a number falls back to no pan and 100%.</summary> */
         public CanvasView(Vector2 pan, float zoom)
@@ -49,13 +56,31 @@ namespace QuestSystem.EditorTools
         /** <summary>The view moved by a screen distance.</summary> */
         public CanvasView Panned(Vector2 delta) => new CanvasView(Pan + delta, Zoom);
 
-        /** <summary>The view that fits a content rect in a viewport with a margin, no closer than 100%.</summary> */
-        public static CanvasView Framing(Rect content, Vector2 viewportSize, float margin = 40f)
+        /**
+         * <summary>The view that shows a content rect below a top inset: as large as fits up to 100% and no smaller than
+         * <paramref name="minZoom" />, centred across when it fits and from the left when it doesn't.</summary>
+         */
+        public static CanvasView FramingBelow(Rect content, Vector2 viewportSize, float top, float margin, float minZoom)
         {
-            if (content.width <= 0f || content.height <= 0f) return new CanvasView(viewportSize / 2f - content.center, 1f);
-            var fit = Mathf.Min((viewportSize.x - margin * 2f) / content.width, (viewportSize.y - margin * 2f) / content.height);
-            var zoom = Mathf.Clamp(fit, MinZoom, 1f);
-            return new CanvasView(viewportSize / 2f - content.center * zoom, zoom);
+            var area = new Vector2(viewportSize.x - margin * 2f, viewportSize.y - top - margin);
+            var fit = content.width > 0f && content.height > 0f ? Mathf.Min(area.x / content.width, area.y / content.height) : MaxFitZoom;
+            var zoom = Mathf.Clamp(fit, Mathf.Max(minZoom, MinZoom), MaxFitZoom);
+            var width = content.width * zoom;
+            var x = width <= area.x ? margin + (area.x - width) / 2f : margin;
+            return new CanvasView(new Vector2(x - content.xMin * zoom, top - content.yMin * zoom), zoom);
+        }
+
+        /** <summary>The smallest rect holding every rect given; an empty rect when none is.</summary> */
+        public static Rect Union(IEnumerable<Rect> rects)
+        {
+            var any = false;
+            var union = new Rect();
+            foreach (var rect in rects)
+            {
+                union = any ? Rect.MinMaxRect(Mathf.Min(union.xMin, rect.xMin), Mathf.Min(union.yMin, rect.yMin), Mathf.Max(union.xMax, rect.xMax), Mathf.Max(union.yMax, rect.yMax)) : rect;
+                any = true;
+            }
+            return union;
         }
 
         #endregion

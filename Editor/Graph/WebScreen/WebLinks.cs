@@ -46,7 +46,7 @@ namespace QuestSystem.EditorTools
                 {
                     var labels = pair.Select(link => link.Label).Distinct().ToList();
                     var label = labels.Count <= 2 ? string.Join(" · ", labels) : $"{labels[0]} · +{labels.Count - 1}";
-                    links.Add(new WebLink(pair.Key, reader, label, pair.Any(link => link.Slot == LinkSlot.Fails || link.Slot == LinkSlot.StepFails)));
+                    links.Add(new WebLink(pair.Key, reader, label, pair.Any(link => LinkSlots.Fails(link.Slot))));
                 }
             }
             return links;

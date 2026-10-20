@@ -19,6 +19,13 @@ namespace QuestSystem
         string StateName { get; }
     }
 
+    /** <summary>A condition reading a quest's step that tools can point at another quest's step, as copying steps between quests does.</summary> */
+    public interface IStepRetargetable
+    {
+        /** <summary>Reads this quest's step instead.</summary> */
+        void Retarget(QuestDefinition quest, string stepId);
+    }
+
     /** <summary>A quest reference found in a condition tree, with how the tree uses it.</summary> */
     public readonly struct FoundReference
     {
@@ -52,8 +59,8 @@ namespace QuestSystem
         /** <summary>The condition as a quest reference; null when it isn't one.</summary> */
         public static IQuestReference Of(ICondition<IFacts> condition) => condition as IQuestReference;
 
-        /** <summary>The condition as a step condition editor tools can point elsewhere; null when it isn't one.</summary> */
-        internal static StepStateCondition StepConditionOf(ICondition<IFacts> condition) => condition as StepStateCondition;
+        /** <summary>The condition as one tools can point at another step; null when it isn't one.</summary> */
+        public static IStepRetargetable RetargetableOf(ICondition<IFacts> condition) => condition as IStepRetargetable;
 
         /** <summary>The subject as a quest; null when it isn't one.</summary> */
         public static QuestDefinition QuestOf(IConditionSubject subject) => subject as QuestDefinition;

@@ -117,8 +117,11 @@ namespace QuestSystem.EditorTools
             for (int i = 0, n = 0; i < quest.Steps.Count; i++)
                 if (quest.Steps[i] != null) labels[record.Steps[n++]] = $"step {i + 1}";
 
+            var waits = record.Steps.ToDictionary(step => step, step => new StepWaits(record, step));
+            var startable = Startable(record, waits);
+            var stuck = new HashSet<StepRecord>(record.Steps.Where(step => !startable.Contains(step)));
             var waiting = new HashSet<StepRecord>();
-            foreach (var cycle in Cycles(record))
+            foreach (var cycle in Cycles(stuck, waits))
             {
                 waiting.UnionWith(cycle);
                 var message = cycle.Count == 1
@@ -127,17 +130,7 @@ namespace QuestSystem.EditorTools
                 foreach (var step in cycle)
                     issues.Add(Error(quest, message, step.Definition.Id));
             }
-
-            var reached = new HashSet<StepRecord>();
-            var open = new Stack<StepRecord>(record.Steps.Where(step => step.Follows.Count == 0 || StartsWithoutFollowed(step)));
-            while (open.Count > 0)
-            {
-                var step = open.Pop();
-                if (!reached.Add(step)) continue;
-                foreach (var dependant in step.Dependants)
-                    if (dependant.Definition.AfterRule == StepJoin.Any || dependant.Follows.All(reached.Contains) || StartsWithoutFollowed(dependant)) open.Push(dependant);
-            }
-            foreach (var step in record.Steps.Where(step => !reached.Contains(step) && !waiting.Contains(step)))
+            foreach (var step in stuck.Where(step => !waiting.Contains(step)))
                 issues.Add(Warning(quest, $"{labels[step]} can never start", step.Definition.Id));
 
             if (!quest.Steps.Any(step => step != null && step.EndsQuest))
@@ -147,28 +140,22 @@ namespace QuestSystem.EditorTools
             }
         }
 
-        /** <summary>True when a step's start doesn't wait on the steps it follows: an unlock condition replaces waiting for the step above.</summary> */
-        private static bool StartsWithoutFollowed(StepRecord step) => step.Definition.Start == StepStart.AfterStepAbove && step.Definition.UnlockWhen != null;
-
-        /** <summary>The steps a step waits for: those it follows, unless its condition replaces that, and steps of this quest its condition requires.</summary> */
-        private static List<StepRecord> WaitsFor(QuestRecord record, StepRecord step)
+        /** <summary>Every step that can ever start: started over and over until nothing more can, as the quest service would.</summary> */
+        private static HashSet<StepRecord> Startable(QuestRecord record, Dictionary<StepRecord, StepWaits> waits)
         {
-            var waits = StartsWithoutFollowed(step) ? new List<StepRecord>() : new List<StepRecord>(step.Follows);
-            var found = new List<FoundReference>();
-            QuestReferences.Collect(step.Definition.UnlockWhen, found);
-            foreach (var reference in found)
+            var started = new HashSet<StepRecord>();
+            for (var changed = true; changed;)
             {
-                if (!reference.Use.AsItself || !reference.Use.Required || reference.Reference.Quest != record.Definition || reference.Reference.StepId == null) continue;
-                var target = record.Find(reference.Reference.StepId);
-                if (target != null && !waits.Contains(target)) waits.Add(target);
+                changed = false;
+                foreach (var step in record.Steps)
+                    if (!started.Contains(step) && waits[step].CanStart(started)) changed |= started.Add(step);
             }
-            return waits;
+            return started;
         }
 
-        /** <summary>Each set of steps that wait on each other, found by a depth-first walk over what each step waits for.</summary> */
-        private static List<List<StepRecord>> Cycles(QuestRecord record)
+        /** <summary>Each set of steps among those that can't start that wait on each other, found by a depth-first walk.</summary> */
+        private static List<List<StepRecord>> Cycles(HashSet<StepRecord> stuck, Dictionary<StepRecord, StepWaits> waits)
         {
-            var steps = record.Steps;
             var cycles = new List<List<StepRecord>>();
             var state = new Dictionary<StepRecord, int>();
             var path = new List<StepRecord>();
@@ -176,7 +163,7 @@ namespace QuestSystem.EditorTools
             {
                 state[step] = 1;
                 path.Add(step);
-                foreach (var before in WaitsFor(record, step))
+                foreach (var before in waits[step].All.Where(stuck.Contains))
                 {
                     if (!state.TryGetValue(before, out var seen)) Visit(before);
                     else if (seen == 1) cycles.Add(path.GetRange(path.IndexOf(before), path.Count - path.IndexOf(before)));
@@ -184,9 +171,50 @@ namespace QuestSystem.EditorTools
                 path.RemoveAt(path.Count - 1);
                 state[step] = 2;
             }
-            foreach (var step in steps)
+            foreach (var step in stuck)
                 if (!state.ContainsKey(step)) Visit(step);
             return cycles;
+        }
+
+        /**
+         * <summary>What a step waits for before it can start: the steps it follows, all of them or any one (none when an
+         * unlock condition replaces waiting for the step above), and the steps of its own quest its unlock condition
+         * requires to have happened.</summary>
+         */
+        private sealed class StepWaits
+        {
+            private readonly List<StepRecord> _links = new List<StepRecord>();
+            private readonly bool _anyLink;
+            private readonly List<StepRecord> _conditions = new List<StepRecord>();
+
+            /** <summary>Every step it waits for, links and conditions alike.</summary> */
+            public IEnumerable<StepRecord> All => _links.Concat(_conditions);
+
+            public StepWaits(QuestRecord record, StepRecord step)
+            {
+                var definition = step.Definition;
+                var conditionReplacesWait = definition.Start == StepStart.AfterStepAbove && definition.UnlockWhen != null;
+                if (!conditionReplacesWait) _links.AddRange(step.Follows);
+                _anyLink = definition.Start == StepStart.AfterLinkedSteps && definition.AfterRule == StepJoin.Any;
+
+                var found = new List<FoundReference>();
+                QuestReferences.Collect(definition.UnlockWhen, found);
+                foreach (var reference in found)
+                {
+                    var read = reference.Reference;
+                    if (!reference.Use.AsItself || !reference.Use.Required || read.Quest != record.Definition || read.StepId == null) continue;
+                    if (read.StateName == QuestStates.NameOf(StepState.Locked)) continue;
+                    var target = record.Find(read.StepId);
+                    if (target != null && !_conditions.Contains(target)) _conditions.Add(target);
+                }
+            }
+
+            /** <summary>True when the steps already started let this one start.</summary> */
+            public bool CanStart(HashSet<StepRecord> started)
+            {
+                var linksMet = _links.Count == 0 || (_anyLink ? _links.Any(started.Contains) : _links.All(started.Contains));
+                return linksMet && _conditions.All(started.Contains);
+            }
         }
 
         private static QuestIssue Error(QuestDefinition quest, string problem, string stepId = null) => new QuestIssue(QuestIssueLevel.Error, quest, problem, stepId);

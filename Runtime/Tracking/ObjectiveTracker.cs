@@ -29,9 +29,6 @@ namespace QuestSystem
          */
         public virtual bool TryCollectSubjects(ICollection<IConditionSubject> subjects) => Trackers.StateProgressOf(this) == null;
 
-        /** <summary>Adds the conditions it holds, so tools can find what they read; none by default.</summary> */
-        public virtual void CollectConditions(ICollection<ICondition<IFacts>> conditions) { }
-
         #endregion
     }
 
@@ -57,6 +54,13 @@ namespace QuestSystem
         int ProgressNow(IFacts facts);
     }
 
+    /** <summary>A tracker that holds conditions, so tools can find what they read.</summary> */
+    public interface IConditionHolder
+    {
+        /** <summary>Adds the conditions it holds.</summary> */
+        void CollectConditions(ICollection<ICondition<IFacts>> conditions);
+    }
+
     /** <summary>The one place that asks a tracker what it can do.</summary> */
     public static class Trackers
     {
@@ -68,11 +72,14 @@ namespace QuestSystem
 
         /** <summary>The tracker as state progress; null when it doesn't read state.</summary> */
         public static IStateProgress StateProgressOf(ObjectiveTracker tracker) => tracker as IStateProgress;
+
+        /** <summary>The tracker as a holder of conditions; null when it holds none.</summary> */
+        public static IConditionHolder ConditionHolderOf(ObjectiveTracker tracker) => tracker as IConditionHolder;
     }
 
     /** <summary>Counts a signal: each time it is raised adds its amount.</summary> */
     [Serializable]
-    public sealed class SignalTracker : ObjectiveTracker, ISignalCounter
+    public sealed class SignalTracker : ObjectiveTracker, ISignalCounter, IConditionHolder
     {
         #region Inspector Fields
 
@@ -118,7 +125,7 @@ namespace QuestSystem
         }
 
         /** <inheritdoc /> */
-        public override void CollectConditions(ICollection<ICondition<IFacts>> conditions)
+        public void CollectConditions(ICollection<ICondition<IFacts>> conditions)
         {
             if (onlyWhen != null) conditions.Add(onlyWhen);
         }
@@ -174,7 +181,7 @@ namespace QuestSystem
 
     /** <summary>Completes the objective while a condition holds: another quest done, a flag set, anything the game can check.</summary> */
     [Serializable]
-    public sealed class ConditionTracker : ObjectiveTracker, IStateProgress
+    public sealed class ConditionTracker : ObjectiveTracker, IStateProgress, IConditionHolder
     {
         #region Inspector Fields
 
@@ -205,7 +212,7 @@ namespace QuestSystem
         public override bool TryCollectSubjects(ICollection<IConditionSubject> subjects) => ConditionSubjects.TryCollect(condition, subjects);
 
         /** <inheritdoc /> */
-        public override void CollectConditions(ICollection<ICondition<IFacts>> conditions)
+        public void CollectConditions(ICollection<ICondition<IFacts>> conditions)
         {
             if (condition != null) conditions.Add(condition);
         }

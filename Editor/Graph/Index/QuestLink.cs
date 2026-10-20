@@ -17,6 +17,24 @@ namespace QuestSystem.EditorTools
         Objective,
     }
 
+    /** <summary>What each slot means for a link: its wording, whether it fails the quest, whether it gates giving it.</summary> */
+    public static class LinkSlots
+    {
+        /** <summary>The verb a link in the slot starts with: "needs", "fails if", "tracks".</summary> */
+        public static string Verb(LinkSlot slot) => slot switch
+        {
+            LinkSlot.Fails or LinkSlot.StepFails => "fails if",
+            LinkSlot.Objective => "tracks",
+            _ => "needs",
+        };
+
+        /** <summary>True when a condition in the slot fails the quest.</summary> */
+        public static bool Fails(LinkSlot slot) => slot == LinkSlot.Fails || slot == LinkSlot.StepFails;
+
+        /** <summary>True when a condition in the slot decides whether the quest can be given.</summary> */
+        public static bool GatesAvailability(LinkSlot slot) => slot == LinkSlot.Available;
+    }
+
     /** <summary>One quest reading another (or itself): which condition, which step, and how.</summary> */
     public sealed class QuestLink
     {
@@ -37,16 +55,17 @@ namespace QuestSystem.EditorTools
         /** <summary>The step read; null when the whole quest is.</summary> */
         public string ReadStepId { get; }
 
-        /** <summary>The state asked for, in words; "read" when the condition can't say.</summary> */
+        /** <summary>The state asked for, in words; <see cref="UnknownState" /> when the condition can't say.</summary> */
         public string StateName { get; }
 
         /** <summary>How the condition tree uses it.</summary> */
         public LeafUse Use { get; }
 
         /** <summary>The link in a few words, for wires: "needs done", "fails if step done", "needs not active".</summary> */
-        public string Label =>
-            (Slot == LinkSlot.Fails || Slot == LinkSlot.StepFails ? "fails if " : Slot == LinkSlot.Objective ? "tracks " : "needs ")
-            + (Use.AsItself ? "" : "not ") + (ReadStepId == null ? "" : "step ") + StateName;
+        public string Label => $"{LinkSlots.Verb(Slot)} {(Use.AsItself ? "" : "not ")}{(ReadStepId == null ? "" : "step ")}{StateName}";
+
+        /** <summary>The state a link shows when its condition reads a quest but can't say which state.</summary> */
+        public const string UnknownState = "read";
 
         #endregion
 

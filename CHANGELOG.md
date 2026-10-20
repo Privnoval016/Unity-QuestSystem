@@ -13,6 +13,9 @@
 - The quest graph (*Window > Quests > Quest Graph*): the web of every quest, and one quest's steps to edit, on a
   custom canvas that follows the editor skin. Every edit is one Undo step; the Inspector shows the selected step.
   Built on a quest index kept current one asset at a time.
+- Kinds pick a colour for the graph. Saved enums (states, start rules, joins, completion) have fixed numbers.
+- `IConditionHolder` replaces the trackers' virtual `CollectConditions`; `IStepRetargetable` lets a pasted step's
+  conditions follow its copies.
 
 ## 2.0.0 (2026-10-19)
 

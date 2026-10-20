@@ -1,4 +1,5 @@
 using System.Linq;
+using Extensions.Logic;
 using NUnit.Framework;
 using QuestSystem.EditorTools;
 using static QuestSystem.Tests.Build;
@@ -71,6 +72,44 @@ namespace QuestSystem.Tests
             service.Raise(a);
             Assert.That(service.StateOf(quest, "c"), Is.EqualTo(StepState.Active));
             Assert.That(service.StateOf(quest, "b"), Is.EqualTo(StepState.Active));
+        }
+
+        [Test]
+        public void AnyLink_KeepsItsProgress_WhenAnotherLinkedStepFinishesLater()
+        {
+            var a = _kit.Signal("A");
+            var b = _kit.Signal("B");
+            var c = _kit.Signal("C");
+            var quest = _kit.Quest("Merge", new[]
+            {
+                Step("a", new StepSettings { Start = StepStart.WithQuest }, Count("x", a)),
+                Step("b", new StepSettings { Start = StepStart.WithQuest }, Count("y", b)),
+                Step("c", AfterAny("a", "b"), Count("z", c, 2)),
+            });
+            var service = _kit.Start();
+            service.Give(quest);
+            service.Raise(a);
+            service.Raise(c);
+            service.Raise(b);
+            Assert.That(service.StateOf(quest, "c"), Is.EqualTo(StepState.Active));
+            Assert.That(service.ProgressOf(quest, "z"), Is.EqualTo(1), "the second linked step finishing doesn't start it over");
+        }
+
+        [Test]
+        public void AnyLink_WhoseLinkedStepsFinishTogether_StartsOnce()
+        {
+            var both = _kit.Signal("Both");
+            var quest = _kit.Quest("Merge", new[]
+            {
+                Step("a", new StepSettings { Start = StepStart.WithQuest }, Count("x", both)),
+                Step("b", new StepSettings { Start = StepStart.WithQuest }, Count("y", both)),
+                Step("c", AfterAny("a", "b"), Count("z", both, 2)),
+            });
+            var service = _kit.Start();
+            service.Give(quest);
+            service.Raise(both);
+            Assert.That(service.StateOf(quest, "c"), Is.EqualTo(StepState.Active));
+            Assert.That(service.ProgressOf(quest, "z"), Is.EqualTo(0), "the signal that started it isn't counted by it");
         }
 
         [TestCase(true)]
@@ -246,6 +285,61 @@ namespace QuestSystem.Tests
             quest.Configure(new[] { Step("start", Count("s", _kit.Signal("S"))), Step("left", After("start"), Count("l", _kit.Signal("L"))), Step("right", new StepSettings { Start = StepStart.AfterLinkedSteps, After = new[] { "start" }, EndsQuest = true }, Count("r", _kit.Signal("R"))) },
                 new QuestSettings { Title = "Fork" });
             Assert.That(Problems(quest, QuestIssueLevel.Warning), Has.None.Contains("each end the quest"));
+        }
+
+        [Test]
+        public void TheValidator_SaysWhichStepEachProblemIsOn()
+        {
+            var quest = _kit.Quest("Links", new[] { Step("a", Count("x", _kit.Signal("A"))), Step("b", After("gone"), Count("y", _kit.Signal("B"))) });
+            var issues = QuestValidator.Validate(quest);
+            Assert.That(issues.Single(issue => issue.Problem.Contains("doesn't exist")).StepId, Is.EqualTo("b"));
+            Assert.That(issues.Single(issue => issue.Problem == "has no kind").StepId, Is.Null);
+        }
+
+        [Test]
+        public void AnAnyLinkWithAStartableBranch_IsNotALoop()
+        {
+            var quest = _kit.Quest("Retry", new[]
+            {
+                Step("a", Count("x", _kit.Signal("A"))),
+                Step("b", AfterAny("a", "c"), Count("y", _kit.Signal("B"))),
+                Step("c", After("b"), Count("z", _kit.Signal("C"))),
+            }, new QuestSettings { Title = "Retry" });
+            Assert.That(Problems(quest, QuestIssueLevel.Error), Is.Empty);
+            Assert.That(Problems(quest, QuestIssueLevel.Warning), Has.None.Contains("never start"));
+        }
+
+        [Test]
+        public void ALinkRule_OnAStepThatFollowsTheStepAbove_IsIgnored()
+        {
+            var quest = _kit.Quest("Plain", new[]
+            {
+                Step("a", Count("x", _kit.Signal("A"))),
+                Step("b", new StepSettings { AfterRule = StepJoin.Any }, Count("y", _kit.Signal("B"))),
+            }, new QuestSettings { Title = "Plain" });
+            Assert.That(Problems(quest, QuestIssueLevel.Error), Is.Empty);
+            Assert.That(Problems(quest, QuestIssueLevel.Warning), Is.EqualTo(new[] { "has no kind" }));
+        }
+
+        [Test]
+        public void ConditionsReadingALockedOrNegatedStep_AreNotLoops_ButADoneStepIs()
+        {
+            var quest = _kit.Quest("Reads", new[] { Step("tmp") });
+            quest.Configure(new[]
+            {
+                Step("a", new StepSettings { UnlockWhen = new StepStateCondition(quest, "b", StepState.Locked) }, Count("w", _kit.Signal("A"))),
+                Step("b", After("a"), Count("x", _kit.Signal("B"))),
+                Step("c", new StepSettings { Start = StepStart.WithQuest, UnlockWhen = new NotCondition<IFacts> { child = new StepStateCondition(quest, "d") } }, Count("y", _kit.Signal("C"))),
+                Step("d", After("c"), Count("z", _kit.Signal("D"))),
+            }, new QuestSettings { Title = "Reads" });
+            Assert.That(Problems(quest, QuestIssueLevel.Error), Has.None.Contains("wait on each other"));
+
+            quest.Configure(new[]
+            {
+                Step("e", new StepSettings { Start = StepStart.WithQuest, UnlockWhen = new StepStateCondition(quest, "f") }, Count("y", _kit.Signal("E"))),
+                Step("f", After("e"), Count("z", _kit.Signal("F"))),
+            }, new QuestSettings { Title = "Reads" });
+            Assert.That(Problems(quest, QuestIssueLevel.Error), Has.Some.Contains("wait on each other"));
         }
 
         [Test]

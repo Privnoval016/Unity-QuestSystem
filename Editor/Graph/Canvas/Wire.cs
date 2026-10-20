@@ -43,6 +43,9 @@ namespace QuestSystem.EditorTools
         /** <summary>True when it is drawn faint, outside a focus.</summary> */
         public bool Faded { get; set; }
 
+        /** <summary>True when it isn't drawn at all, as when a filter hides either end.</summary> */
+        public bool Hidden { get; set; }
+
         /** <summary>True when it is selected.</summary> */
         public bool Selected { get; set; }
     }

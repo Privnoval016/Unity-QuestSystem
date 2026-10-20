@@ -4,26 +4,26 @@ namespace QuestSystem
     public enum QuestState
     {
         /** <summary>Not given yet.</summary> */
-        NotGiven,
+        NotGiven = 0,
         /** <summary>Given and under way.</summary> */
-        Active,
+        Active = 1,
         /** <summary>Completed. A repeatable quest can be given again.</summary> */
-        Done,
+        Done = 2,
         /** <summary>Failed.</summary> */
-        Failed,
+        Failed = 3,
     }
 
     /** <summary>A step's state.</summary> */
     public enum StepState
     {
         /** <summary>Not started.</summary> */
-        Locked,
+        Locked = 0,
         /** <summary>Started; its objectives count.</summary> */
-        Active,
+        Active = 1,
         /** <summary>Completed.</summary> */
-        Done,
+        Done = 2,
         /** <summary>Failed, which fails its quest.</summary> */
-        Failed,
+        Failed = 3,
     }
 
     /** <summary>Quest state, as conditions read it.</summary> */

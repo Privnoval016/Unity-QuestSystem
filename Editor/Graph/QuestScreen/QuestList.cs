@@ -13,6 +13,7 @@ namespace QuestSystem.EditorTools
         private readonly QuestIndex _index;
         private readonly ToolbarSearchField _search = new ToolbarSearchField();
         private readonly ScrollView _list = new ScrollView();
+        private readonly DeferredRebuild _rebuild;
         private QuestDefinition _current;
 
         #endregion
@@ -30,6 +31,7 @@ namespace QuestSystem.EditorTools
         public QuestList(QuestIndex index)
         {
             _index = index;
+            _rebuild = new DeferredRebuild(this, Rebuild);
             AddToClassList("quest-graph__sidebar");
             _search.AddToClassList("quest-graph__sidebar-search");
             _search.RegisterValueChangedCallback(_ => Rebuild());
@@ -44,20 +46,26 @@ namespace QuestSystem.EditorTools
             Rebuild();
         }
 
-        /** <summary>Redraws the list from the index.</summary> */
+        /** <summary>Redraws the list on the next update, once however often it is asked; not while hidden.</summary> */
+        public void RequestRebuild() => _rebuild.Request();
+
+        /** <summary>Redraws the list from the index now.</summary> */
         public void Rebuild()
         {
+            _rebuild.Cancel();
             _list.Clear();
             var filter = _search.value?.Trim() ?? "";
             var groups = _index.Quests.Where(quest => quest != null && (filter.Length == 0 || QuestStates.TitleOf(quest).IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0))
                 .GroupBy(quest => quest.Kind)
-                .OrderBy(group => group.Key == null ? int.MaxValue : group.Key.Order).ThenBy(group => group.Key == null ? "" : group.Key.name);
+                .OrderBy(group => group.Key == null ? int.MaxValue : group.Key.Order).ThenBy(group => QuestStates.NameOf(group.Key));
             var any = false;
             foreach (var group in groups)
             {
                 any = true;
-                var heading = new Label(group.Key == null ? "No kind" : group.Key.name);
+                var heading = new VisualElement();
                 heading.AddToClassList("quest-graph__group");
+                heading.Add(KindLooks.Swatch(group.Key));
+                heading.Add(new Label(QuestStates.NameOf(group.Key)));
                 _list.Add(heading);
                 foreach (var quest in group.OrderBy(quest => quest.Order).ThenBy(QuestStates.TitleOf))
                 {
@@ -68,24 +76,20 @@ namespace QuestSystem.EditorTools
                     name.AddToClassList("quest-graph__list-name");
                     item.Add(name);
                     var summary = _index.SummaryOf(quest);
-                    if (summary?.Errors > 0) item.Add(Badge(summary.Errors, "error"));
-                    if (summary?.Warnings > 0) item.Add(Badge(summary.Warnings, "warning"));
+                    if (summary?.Errors > 0) item.Add(Badge(summary.Errors, QuestIssueLevel.Error));
+                    if (summary?.Warnings > 0) item.Add(Badge(summary.Warnings, QuestIssueLevel.Warning));
                     _list.Add(item);
                 }
             }
             if (!any) _list.Add(new Label("No matches") { name = "empty" });
         }
 
-        #endregion
-
-        #region Helpers
-
-        /** <summary>A count in a small coloured badge.</summary> */
-        internal static Label Badge(int count, string kind)
+        /** <summary>A count of problems in a small badge coloured by their level.</summary> */
+        internal static Label Badge(int count, QuestIssueLevel level)
         {
             var badge = new Label(count.ToString());
             badge.AddToClassList("quest-graph__badge");
-            badge.AddToClassList("quest-graph__badge--" + kind);
+            badge.AddToClassList(level == QuestIssueLevel.Error ? "quest-graph__badge--error" : "quest-graph__badge--warning");
             return badge;
         }
 

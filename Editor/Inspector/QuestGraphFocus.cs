@@ -1,5 +1,5 @@
-using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 
 namespace QuestSystem.EditorTools
@@ -14,13 +14,6 @@ namespace QuestSystem.EditorTools
 
         #endregion
 
-        #region Properties
-
-        /** <summary>Raised when a focus changes.</summary> */
-        public static event Action<QuestDefinition> OnChanged = delegate { };
-
-        #endregion
-
         #region Public API
 
         /** <summary>The step the graph has selected in a quest; null for the whole quest.</summary> */
@@ -30,11 +23,24 @@ namespace QuestSystem.EditorTools
         public static void Focus(QuestDefinition quest, string stepId)
         {
             if (quest == null) return;
+            Forget(null);
+            var changed = StepOf(quest) != stepId || Selection.activeObject != quest;
             if (stepId == null) Steps.Remove(quest);
             else Steps[quest] = stepId;
             if (Selection.activeObject != quest) Selection.activeObject = quest;
-            OnChanged(quest);
-            ActiveEditorTracker.sharedTracker.ForceRebuild();
+            if (changed) ActiveEditorTracker.sharedTracker.ForceRebuild();
+        }
+
+        /** <summary>Lets the Inspector show a quest whole again, without selecting it; with null, forgets quests that no longer exist.</summary> */
+        public static void Forget(QuestDefinition quest)
+        {
+            if (quest != null)
+            {
+                if (Steps.Remove(quest)) ActiveEditorTracker.sharedTracker.ForceRebuild();
+                return;
+            }
+            foreach (var gone in Steps.Keys.Where(key => key == null).ToList())
+                Steps.Remove(gone);
         }
 
         #endregion

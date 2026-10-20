@@ -54,7 +54,7 @@ namespace QuestSystem.EditorTools
                         Refresh(EditorUtility.EntityIdToObject(created.entityId) as QuestDefinition);
                         break;
                     case ObjectChangeKind.DestroyAssetObject:
-                        _index.RemoveDestroyed();
+                        _index?.RemoveDestroyed();
                         break;
                 }
             }

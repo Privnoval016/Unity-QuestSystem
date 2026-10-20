@@ -19,7 +19,7 @@ namespace QuestSystem.EditorTools
 
         private Color _minor = new Color(1f, 1f, 1f, 0.03f);
         private Color _major = new Color(1f, 1f, 1f, 0.06f);
-        private CanvasView _view = new CanvasView(Vector2.zero, 1f);
+        private CanvasView _view = CanvasView.Default;
 
         #endregion
 

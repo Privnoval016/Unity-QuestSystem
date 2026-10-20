@@ -13,6 +13,9 @@ namespace QuestSystem.EditorTools
         /** <summary>The quest.</summary> */
         public QuestDefinition Quest { get; }
 
+        /** <summary>Where wires leave and arrive, given the node's fixed height.</summary> */
+        public Rect Rect => new Rect(Position, new Vector2(WebLayout.NodeWidth, WebLayout.NodeHeight));
+
         /** <summary>The handle on the right edge that draws a link.</summary> */
         public VisualElement Handle { get; }
 
@@ -32,12 +35,13 @@ namespace QuestSystem.EditorTools
         #region Public API
 
         /** <summary>Makes a node.</summary> */
-        public QuestNodeView(QuestDefinition quest, QuestSummary summary, int kindColour, bool readsItself)
+        public QuestNodeView(QuestDefinition quest, QuestSummary summary, bool readsItself)
         {
             Quest = quest;
             AddToClassList("quest-graph__quest");
-            AddToClassList("quest-graph__kind-" + kindColour);
+            AddToClassList(KindLooks.ClassOf(quest.Kind));
             style.width = WebLayout.NodeWidth;
+            style.height = WebLayout.NodeHeight;
             focusable = true;
 
             var head = new VisualElement();
@@ -57,8 +61,8 @@ namespace QuestSystem.EditorTools
                 loop.AddToClassList("quest-graph__pin");
                 head.Add(loop);
             }
-            if (summary?.Errors > 0) head.Add(Badge(summary.Errors, "error", summary));
-            if (summary?.Warnings > 0) head.Add(Badge(summary.Warnings, "warning", summary));
+            if (summary?.Errors > 0) head.Add(Badge(summary.Errors, QuestIssueLevel.Error, summary));
+            if (summary?.Warnings > 0) head.Add(Badge(summary.Warnings, QuestIssueLevel.Warning, summary));
             Add(head);
 
             var facts = new Label(string.Join("  ·  ", Facts(quest)));
@@ -68,10 +72,11 @@ namespace QuestSystem.EditorTools
             Handle = new VisualElement { tooltip = "Drag to another quest: it becomes available only once this is done" };
             Handle.AddToClassList("quest-graph__handle");
             Add(Handle);
+            Add(SelectionRing.Make());
         }
 
         /** <summary>Shows the node as selected or not.</summary> */
-        public void SetSelected(bool selected) => EnableInClassList("quest-graph__quest--selected", selected);
+        public void SetSelected(bool selected) => EnableInClassList(SelectionRing.SelectedClass, selected);
 
         /** <summary>Fades the node out of a focus or a search, or brings it back.</summary> */
         public void SetFaded(bool faded) => EnableInClassList("quest-graph__quest--faded", faded);
@@ -91,9 +96,9 @@ namespace QuestSystem.EditorTools
             if (!quest.HiddenUntilGiven) yield return "shown early";
         }
 
-        private static Label Badge(int count, string kind, QuestSummary summary)
+        private static Label Badge(int count, QuestIssueLevel level, QuestSummary summary)
         {
-            var badge = QuestList.Badge(count, kind);
+            var badge = QuestList.Badge(count, level);
             badge.tooltip = string.Join("\n", summary.Issues.Select(issue => issue.Problem));
             return badge;
         }
